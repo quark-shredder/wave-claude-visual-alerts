@@ -1,0 +1,31 @@
+{
+  "name": "wave-claude-visual-alerts",
+  "version": "0.1.0",
+  "description": "Color-coded Wave Terminal border alerts for Claude Code — highlights blocks, tabs, and backgrounds when Claude needs your attention",
+  "type": "module",
+  "bin": {
+    "wave-claude-visual-alerts": "./bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "hooks/",
+    "lib/"
+  ],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "wave-terminal",
+    "waveterm",
+    "hooks",
+    "alerts",
+    "developer-tools"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/quark-shredder/wave-claude-visual-alerts.git"
+  }
+}
