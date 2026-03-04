@@ -45,7 +45,7 @@ CONFIG_FILE="$HOME/.wave-alerts/config.json"
 
 # Defaults (vibrant theme)
 COLOR_STOP="#AB47BC"
-COLOR_PERMISSION="#E53935"
+COLOR_PERMISSION="#00BCD4"
 BG_OPACITY="0.10"
 BG_ENABLED="true"
 
@@ -54,9 +54,9 @@ if [ -f "$CONFIG_FILE" ]; then
   THEME=$("$JQ" -r '.theme // ""' "$CONFIG_FILE" 2>/dev/null)
   case "$THEME" in
     nord)
-      COLOR_STOP="#B48EAD"; COLOR_PERMISSION="#BF616A" ;;
+      COLOR_STOP="#B48EAD"; COLOR_PERMISSION="#EBCB8B" ;;
     light)
-      COLOR_STOP="#7B1FA2"; COLOR_PERMISSION="#D84315" ;;
+      COLOR_STOP="#0277BD"; COLOR_PERMISSION="#9E9D24" ;;
   esac
 
   # Per-color overrides (on top of theme)
