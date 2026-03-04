@@ -1,6 +1,6 @@
 #!/bin/bash
 # wave-claude-visual-alerts — Visual alerts for Claude Code in Wave Terminal
-# https://github.com/user/wave-claude-visual-alerts
+# https://github.com/quark-shredder/wave-claude-visual-alerts
 #
 # Priority-based alert system with fallback across blocks/tabs.
 #
@@ -12,8 +12,7 @@
 # State dir: /tmp/wave-alerts/{tabid}/{blockid}
 # State format: "state|color|priority"
 #
-# Priority: permission(4) > question/plan(3) > stop(1)
-# Notification is stateless (no state file written).
+# Priority: permission(4) > stop(1)
 #
 # Installed to: ~/.wave-alerts/hooks/wave-alert-hook.sh
 # Run `npx wave-claude-visual-alerts setup` to install/update this hook.
@@ -46,9 +45,7 @@ CONFIG_FILE="$HOME/.wave-alerts/config.json"
 
 # Defaults (vibrant theme)
 COLOR_STOP="#AB47BC"
-COLOR_QUESTION="#2196F3"
-COLOR_PERMISSION="#FF5722"
-COLOR_NOTIFICATION="#FF9800"
+COLOR_PERMISSION="#E53935"
 BG_OPACITY="0.10"
 BG_ENABLED="true"
 
@@ -57,22 +54,16 @@ if [ -f "$CONFIG_FILE" ]; then
   THEME=$("$JQ" -r '.theme // ""' "$CONFIG_FILE" 2>/dev/null)
   case "$THEME" in
     nord)
-      COLOR_STOP="#B48EAD"; COLOR_QUESTION="#88C0D0"
-      COLOR_PERMISSION="#BF616A"; COLOR_NOTIFICATION="#EBCB8B" ;;
+      COLOR_STOP="#B48EAD"; COLOR_PERMISSION="#BF616A" ;;
     light)
-      COLOR_STOP="#7B1FA2"; COLOR_QUESTION="#1565C0"
-      COLOR_PERMISSION="#D84315"; COLOR_NOTIFICATION="#EF6C00" ;;
+      COLOR_STOP="#7B1FA2"; COLOR_PERMISSION="#D84315" ;;
   esac
 
   # Per-color overrides (on top of theme)
   c=$("$JQ" -r '.colors.stop // ""' "$CONFIG_FILE" 2>/dev/null)
   [ -n "$c" ] && COLOR_STOP="$c"
-  c=$("$JQ" -r '.colors.question // ""' "$CONFIG_FILE" 2>/dev/null)
-  [ -n "$c" ] && COLOR_QUESTION="$c"
   c=$("$JQ" -r '.colors.permission // ""' "$CONFIG_FILE" 2>/dev/null)
   [ -n "$c" ] && COLOR_PERMISSION="$c"
-  c=$("$JQ" -r '.colors.notification // ""' "$CONFIG_FILE" 2>/dev/null)
-  [ -n "$c" ] && COLOR_NOTIFICATION="$c"
 
   # Background settings
   BG_OPACITY=$("$JQ" -r '.bgOpacity // "0.10"' "$CONFIG_FILE" 2>/dev/null)
@@ -181,17 +172,8 @@ case "$event" in
   Stop)
     set_border "$COLOR_STOP" "stop" "1"
     ;;
-  Notification)
-    "$WSH" setmeta "frame:activebordercolor=$COLOR_NOTIFICATION" "frame:bordercolor=$COLOR_NOTIFICATION" 2>/dev/null || true
-    "$WSH" tabindicator --persistent --color "$COLOR_NOTIFICATION" --tabid "$TABID" 2>/dev/null || true
-    [ "$BG_ENABLED" = "true" ] && "$WSH" setbg --opacity "$BG_OPACITY" "$COLOR_NOTIFICATION" 2>/dev/null || true
-    ;;
   PreToolUse)
-    tool_name=$("$JQ" -r '.tool_name // ""' <<< "$input")
-    case "$tool_name" in
-      AskUserQuestion) set_border "$COLOR_QUESTION" "question" "3" ;;
-      ExitPlanMode)    set_border "$COLOR_QUESTION" "plan" "3" ;;
-    esac
+    [ -f "$STATE_FILE" ] && clear_border
     ;;
   PermissionRequest)
     set_border "$COLOR_PERMISSION" "permission" "4"

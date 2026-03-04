@@ -30,7 +30,7 @@ const HOOK_TIMEOUT = 3
 // Events with matcher: '*' (tool-scoped)
 const MATCHER_EVENTS = ['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest']
 // Events without matcher
-const PLAIN_EVENTS = ['Stop', 'Notification', 'UserPromptSubmit', 'SessionStart', 'SessionEnd']
+const PLAIN_EVENTS = ['Stop', 'UserPromptSubmit', 'SessionStart', 'SessionEnd']
 const ALL_EVENTS = [...MATCHER_EVENTS, ...PLAIN_EVENTS]
 
 // ─── Helpers ───
@@ -111,9 +111,7 @@ function getEffectiveColors(config) {
   const theme = THEMES[themeName]
   return {
     stop: config.colors?.stop || theme.colors.stop,
-    question: config.colors?.question || theme.colors.question,
     permission: config.colors?.permission || theme.colors.permission,
-    notification: config.colors?.notification || theme.colors.notification,
   }
 }
 
@@ -197,10 +195,8 @@ async function runSetup(args) {
   log(`\n  Theme: ${theme.label} (${themeName})`)
   log(`  Background tint: ${bgEnabled ? `enabled (opacity ${bgOpacity})` : 'disabled'}`)
   log('\n  Alert colors:')
-  log(`    • Stop         ${colors.stop} — task complete`)
-  log(`    • Question     ${colors.question} — question / plan approval`)
+  log(`    • Stop         ${colors.stop} — task complete, your turn`)
   log(`    • Permission   ${colors.permission} — permission needed`)
-  log(`    • Notification ${colors.notification} — notification`)
 
   log('\n  Customize: wave-claude-visual-alerts config --theme <name>')
   log(`  Available themes: ${Object.keys(THEMES).join(', ')}\n`)
@@ -369,9 +365,7 @@ async function runConfig(args) {
   log('')
   log('  Colors:')
   log(`    stop         ${colors.stop}`)
-  log(`    question     ${colors.question}`)
   log(`    permission   ${colors.permission}`)
-  log(`    notification ${colors.notification}`)
 
   if (config.colors && Object.keys(config.colors).length > 0) {
     log(`\n  Custom overrides: ${Object.keys(config.colors).join(', ')}`)
