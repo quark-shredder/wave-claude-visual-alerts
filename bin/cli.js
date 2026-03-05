@@ -28,7 +28,7 @@ const STATE_DIR = '/tmp/wave-alerts'
 const HOOK_TIMEOUT = 3
 
 // Events with matcher: '*' (tool-scoped)
-const MATCHER_EVENTS = ['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest']
+const MATCHER_EVENTS = ['PostToolUse', 'PostToolUseFailure', 'PermissionRequest']
 // Events without matcher
 const PLAIN_EVENTS = ['Stop', 'UserPromptSubmit', 'SessionStart', 'SessionEnd']
 const ALL_EVENTS = [...MATCHER_EVENTS, ...PLAIN_EVENTS]

@@ -172,9 +172,6 @@ case "$event" in
   Stop)
     set_border "$COLOR_STOP" "stop" "1"
     ;;
-  PreToolUse)
-    [ -f "$STATE_FILE" ] && clear_border
-    ;;
   PermissionRequest)
     set_border "$COLOR_PERMISSION" "permission" "4"
     ;;
