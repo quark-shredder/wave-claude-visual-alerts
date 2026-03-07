@@ -1,6 +1,6 @@
 # wave-claude-visual-alerts
 
-Color-coded visual alerts for [Claude Code](https://claude.ai/claude-code) running in [Wave Terminal](https://waveterm.dev). Never miss when Claude finishes a task, asks a question, or needs permission — block borders, tab indicators, and background tints light up with priority-based colors so you always know where to look, even across multiple tabs and windows.
+Color-coded visual alerts for [Claude Code](https://claude.ai/claude-code) running in [Wave Terminal](https://waveterm.dev). Never miss when Claude finishes a task or needs permission — block borders, tab indicators, and background tints light up with priority-based colors so you always know where to look, even across multiple tabs and windows.
 
 ## Quick Start
 
@@ -25,9 +25,7 @@ Three visual layers alert you when Claude needs attention:
 | Color | Hex | Trigger | Priority |
 |-------|-----|---------|----------|
 | Purple | `#AB47BC` | Task complete (`Stop`) | 1 |
-| Amber | `#FF9800` | Notification (background task done) | — |
-| Blue | `#2196F3` | Question / Plan approval | 3 |
-| Red-orange | `#FF5722` | Permission needed | 4 |
+| Cyan | `#00BCD4` | Permission needed | 4 |
 
 Higher priority alerts take precedence. When the highest clears, it falls back to the next.
 
@@ -66,11 +64,11 @@ npx wave-claude-visual-alerts doctor                   # Check dependencies and 
 
 Three built-in color themes to match your Wave Terminal theme:
 
-| Theme | Best for | Stop | Question | Permission | Notification |
-|-------|----------|------|----------|------------|--------------|
-| **vibrant** (default) | Dark themes (One Dark Pro, Dracula) | `#AB47BC` | `#2196F3` | `#FF5722` | `#FF9800` |
-| **nord** | Nord / Arctic themes | `#B48EAD` | `#88C0D0` | `#BF616A` | `#EBCB8B` |
-| **light** | Light themes | `#7B1FA2` | `#1565C0` | `#D84315` | `#EF6C00` |
+| Theme | Best for | Stop | Permission |
+|-------|----------|------|------------|
+| **vibrant** (default) | Dark themes (One Dark Pro, Dracula) | `#AB47BC` | `#00BCD4` |
+| **nord** | Nord / Arctic themes | `#B48EAD` | `#EBCB8B` |
+| **light** | Light themes | `#0277BD` | `#9E9D24` |
 
 Set a theme during setup or anytime after:
 
@@ -109,9 +107,9 @@ Config changes take effect on the next hook trigger (no restart needed).
 
 ## How It Works
 
-The package installs a bash hook script at `~/.wave-alerts/hooks/wave-alert-hook.sh` and registers it in Claude Code's `~/.claude/settings.json` for 8 hook events:
+The package installs a bash hook script at `~/.wave-alerts/hooks/wave-alert-hook.sh` and registers it in Claude Code's `~/.claude/settings.json` for 7 hook events:
 
-`PreToolUse`, `PostToolUse`, `PermissionRequest`, `Stop`, `Notification`, `UserPromptSubmit`, `SessionStart`, `SessionEnd`
+`PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `Stop`, `UserPromptSubmit`, `SessionStart`, `SessionEnd`
 
 The hook uses Wave Terminal's `wsh` CLI to set block metadata (`frame:activebordercolor`, `frame:bordercolor`), tab indicators (`wsh tabindicator`), and tab backgrounds (`wsh setbg`).
 
@@ -119,7 +117,7 @@ State is tracked per-block in `/tmp/wave-alerts/{tabid}/{blockid}` for priority-
 
 ## Coexistence
 
-Works alongside other Claude Code hooks (like [vibecraft](https://github.com/anthropics/vibecraft)). The setup command only adds/removes its own entries and never touches other hooks.
+Works alongside other Claude Code hooks (like [peon-ping](https://github.com/PeonPing/peon-ping) and [vibecraft](https://github.com/anthropics/vibecraft)). The setup command only adds/removes its own entries and never touches other hooks.
 
 ## Troubleshooting
 
@@ -127,7 +125,7 @@ Run `npx wave-claude-visual-alerts doctor` to check your setup.
 
 **Tab indicator not clearing?** State files may be stale. Run `rm -rf /tmp/wave-alerts/` to clean up.
 
-**Colors not showing?** Make sure Wave Terminal is running and `wsh` is accessible. Check with `~/.wave-alerts/../Library/Application\ Support/waveterm/bin/wsh version`.
+**Colors not showing?** Make sure Wave Terminal is running and `wsh` is accessible.
 
 **Wrong colors?** Check `~/.wave-alerts/config.json` for typos in hex values.
 
