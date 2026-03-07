@@ -54,9 +54,9 @@ if [ -f "$CONFIG_FILE" ]; then
   THEME=$("$JQ" -r '.theme // ""' "$CONFIG_FILE" 2>/dev/null)
   case "$THEME" in
     nord)
-      COLOR_STOP="#B48EAD"; COLOR_PERMISSION="#EBCB8B" ;;
+      COLOR_STOP="#B48EAD"; COLOR_PERMISSION="#88C0D0" ;;
     light)
-      COLOR_STOP="#0277BD"; COLOR_PERMISSION="#9E9D24" ;;
+      COLOR_STOP="#7B1FA2"; COLOR_PERMISSION="#D84315" ;;
   esac
 
   # Per-color overrides (on top of theme)

@@ -67,8 +67,8 @@ Three built-in color themes to match your Wave Terminal theme:
 | Theme | Best for | Stop | Permission |
 |-------|----------|------|------------|
 | **vibrant** (default) | Dark themes (One Dark Pro, Dracula) | `#AB47BC` | `#00BCD4` |
-| **nord** | Nord / Arctic themes | `#B48EAD` | `#EBCB8B` |
-| **light** | Light themes | `#0277BD` | `#9E9D24` |
+| **nord** | Nord / Arctic themes | `#B48EAD` | `#88C0D0` |
+| **light** | Light themes | `#7B1FA2` | `#D84315` |
 
 Set a theme during setup or anytime after:
 
