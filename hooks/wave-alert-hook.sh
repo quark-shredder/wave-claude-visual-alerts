@@ -104,9 +104,17 @@ recalc_tab_indicator() {
   result=$(highest_in_dir "$ALERT_DIR/$tabid")
   if [ -n "$result" ]; then
     local color="${result%%|*}"
-    "$WSH" tabindicator --persistent --color "$color" --tabid "$tabid" 2>/dev/null || true
+    if [ "$tabid" = "$TABID" ]; then
+      "$WSH" badge --color "$color" 2>/dev/null || true
+    else
+      "$WSH" tabindicator --color "$color" --tabid "$tabid" 2>/dev/null || true
+    fi
   else
-    "$WSH" tabindicator --clear --tabid "$tabid" 2>/dev/null || true
+    if [ "$tabid" = "$TABID" ]; then
+      "$WSH" badge --clear 2>/dev/null || true
+    else
+      "$WSH" tabindicator --clear --tabid "$tabid" 2>/dev/null || true
+    fi
   fi
 }
 
