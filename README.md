@@ -17,8 +17,10 @@ Three visual layers alert you when Claude needs attention:
 | Layer | Scope | Visible when... |
 |-------|-------|-----------------|
 | **Block border** | Single block | Always (focused + unfocused) |
-| **Tab indicator** | Tab header dot | Tab is active or inactive |
+| **Tab badge** | Tab header dot | Persists on inactive tabs, auto-clears on active tab |
 | **Tab background** | Subtle tint | Tab is active |
+
+On the **active tab**, border color and background tint tell you what's happening. On **inactive tabs**, the colored badge dot draws your attention to switch there.
 
 ### Alert Colors
 
