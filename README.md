@@ -56,14 +56,60 @@ No `jq`. No config file.
 
 ## Customization
 
-Two environment variables, read at hook time:
+Four environment variables, read at hook time. No config file, no restart.
 
 ```bash
 export WAVE_ALERT_COLOR_INPUT="#FF453A"   # permission needed
 export WAVE_ALERT_COLOR_DONE="#58C142"    # task done
+export WAVE_ALERT_ICON_INPUT="bell+beat"  # permission needed
+export WAVE_ALERT_ICON_DONE="circle-check"
 ```
 
+### Colors
+
 Defaults are orange and teal — two entries from Wave's own flag palette that are easy to tell apart from the green/blue/purple most people use for manual tab flags. Any hex (`#RRGGBB`, `#RRGGBBAA`) or CSS colour name works.
+
+### Icons
+
+The flag is just the default. Wave bundles **Font Awesome Pro 6.7.2** and accepts any of its **4,205 icon names** — browse them at [fontawesome.com/icons](https://fontawesome.com/icons), or list the exact set your install ships (macOS paths):
+
+```bash
+cd "$(mktemp -d)" &&
+npx --yes asar extract-file \
+  /Applications/Wave.app/Contents/Resources/app.asar \
+  dist/frontend/fontawesome/css/fontawesome.min.css &&
+grep -oE '\.fa-[a-z0-9-]+\{' fontawesome.min.css |
+  sed -E 's/^\.fa-//; s/\{$//' | sort -u
+```
+
+Useful ones for alerts, all verified present:
+
+| | |
+|---|---|
+| **Attention** | `flag` `bell` `bell-on` `circle-exclamation` `triangle-exclamation` `fire` `bolt` |
+| **Waiting on you** | `hand` `circle-question` `message-question` `person-circle-question` `key` `lock` |
+| **Done** | `circle-check` `check` `star` |
+| **In progress** | `spinner` `hourglass` `hourglass-half` `clock` |
+| **Misc** | `robot` `comment` `comment-dots` `envelope` `circle-dot` `circle-small` |
+
+**Style prefixes.** Bare names resolve to solid. Prefix for other families:
+
+| Syntax | Renders as |
+|---|---|
+| `bell` or `solid@bell` | Solid (default) |
+| `regular@bell` | Sharp Regular — lighter outline |
+| `brands@github` | Brand logos |
+
+**Animation suffixes.** Append `+beat`, `+fade`, or `+spin` to make the badge move — good for a permission prompt that is blocking you:
+
+```bash
+export WAVE_ALERT_ICON_INPUT="bell+beat"
+export WAVE_ALERT_ICON_DONE="circle-check"
+```
+
+> **Gotcha:** an unrecognised icon name is accepted silently and renders as an
+> **empty badge** — nothing validates it. If your flag vanishes after changing
+> the icon, check the spelling against the list above.
 
 ## How It Works
 
@@ -81,7 +127,7 @@ Defaults are orange and teal — two entries from Wave's own flag palette that a
 The hook is ~20 lines of logic. It reads `WAVETERM_TABID` from the environment, exits silently if unset (so it is harmless outside Wave), and runs:
 
 ```bash
-wsh badge flag --color "$color" -b "tab:$WAVETERM_TABID"
+wsh badge "$icon" --color "$color" -b "tab:$WAVETERM_TABID"
 ```
 
 The badge is set on the **tab** rather than the block, so focusing the tab clears it no matter which pane inside is focused.

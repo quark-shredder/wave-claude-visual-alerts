@@ -12,8 +12,10 @@
 # and no state is kept anywhere.
 #
 # Colors default to two unused entries from Wave's own flag palette so they
-# don't collide with tabs you've flagged by hand. Override with
-# WAVE_ALERT_COLOR_INPUT / WAVE_ALERT_COLOR_DONE.
+# don't collide with tabs you've flagged by hand. Override colors with
+# WAVE_ALERT_COLOR_INPUT / WAVE_ALERT_COLOR_DONE and the icon with
+# WAVE_ALERT_ICON_INPUT / WAVE_ALERT_ICON_DONE (any Font Awesome 6 name,
+# optionally suffixed +beat, +fade, +spin).
 #
 # Installed to: ~/.wave-alerts/hooks/wave-alert-hook.sh
 # Run `npx wave-claude-visual-alerts setup` to install/update.
@@ -27,10 +29,10 @@ WSH="$HOME/Library/Application Support/waveterm/bin/wsh"
 [ -x "$WSH" ] || exit 0
 
 case "$1" in
-  input) color="${WAVE_ALERT_COLOR_INPUT:-#FF9500}" ;;
-  done)  color="${WAVE_ALERT_COLOR_DONE:-#00FFDB}" ;;
+  input) color="${WAVE_ALERT_COLOR_INPUT:-#FF9500}"; icon="${WAVE_ALERT_ICON_INPUT:-flag}" ;;
+  done)  color="${WAVE_ALERT_COLOR_DONE:-#00FFDB}";  icon="${WAVE_ALERT_ICON_DONE:-flag}" ;;
   *)     exit 0 ;;
 esac
 
-"$WSH" badge flag --color "$color" -b "tab:$WAVETERM_TABID" >/dev/null 2>&1
+"$WSH" badge "$icon" --color "$color" -b "tab:$WAVETERM_TABID" >/dev/null 2>&1
 exit 0
