@@ -1,11 +1,14 @@
 # wave-claude-visual-alerts — Demo Steps
 
-Execute these steps one at a time. Pause 3 seconds between each step so the viewer can see the indicator changes.
+Execute these steps one at a time. Pause a few seconds between each so the
+viewer can see the tab flag change.
 
 ## Prerequisites
 
-- Permission mode must be set to **"ask every time"** (shift+tab to cycle)
-- Run `rm -rf /tmp/wave-alerts` to clear stale state
+- At least two Wave tabs open, so the flag can be seen on an inactive one.
+- Permission mode set to **"ask every time"** (shift+tab to cycle).
+- Optional: right-click one tab → **Flag Tab** → pick a colour, to show that
+  manual flags survive alerts.
 
 ---
 
@@ -13,80 +16,63 @@ Execute these steps one at a time. Pause 3 seconds between each step so the view
 
 Print this message (no tool calls):
 
-> "This is a demo of wave-claude-visual-alerts — color-coded borders and tab indicators for Claude Code in Wave Terminal. There are two alerts: purple when Claude finishes, and cyan when Claude needs permission."
+> "This is a demo of wave-claude-visual-alerts. It puts a coloured flag on the
+> Wave tab when Claude needs you — orange when Claude wants permission, teal
+> when the task is done. The flag clears itself when you focus the tab."
 
 ---
 
-## Step 2: Show the Stop indicator (purple)
+## Step 2: Show the done flag (teal)
 
 Print this message (no tool calls):
 
-> "First, the Stop indicator. When Claude finishes responding, the block border, tab indicator, and background all turn purple — signaling it's your turn."
+> "First, the done flag. When Claude finishes responding, a teal flag appears
+> on the tab — your turn."
 
-Then stop. Do NOT make any tool calls. Just end your response here so the Stop hook fires and the purple indicator appears.
+Then stop. Make no tool calls, so the `Stop` hook fires.
+
+**Switch to another tab** and point at the teal flag on this one.
 
 ---
 
-## Step 3: Show the Permission indicator (cyan)
+## Step 3: Show that focusing clears it
+
+Switch back to the Claude tab. The flag disappears about half a second later —
+no hook involved, Wave clears it on focus.
+
+---
+
+## Step 4: Show the permission flag (orange)
 
 Print this message:
 
-> "Now the Permission indicator. When Claude needs your approval to run a command, everything turns cyan."
+> "Now the permission flag. When Claude needs approval to run a command, the
+> flag turns orange."
 
-Then immediately run this bash command:
+Then immediately run:
 
 ```bash
 cat /etc/hosts | head -5
 ```
 
-This will trigger a permission prompt. The cyan indicator should appear on the block border, tab, and background. Wait for the user to approve it.
+Switch to another tab while the prompt is pending. The orange flag marks the
+tab that is blocked on you. Come back and approve it.
 
 ---
 
-## Step 4: Show permission clearing
+## Step 5: Show coexistence with a manual flag
 
-After the command runs and output is shown, print:
-
-> "Once you approve, the indicator clears instantly."
-
-Then stop. The Stop hook will fire and show purple again.
+If you flagged this tab by hand in the prerequisites, point out that during an
+alert the alert flag takes the main icon slot and your colour shrinks to a
+small dot beside it — then returns to the main slot once the alert clears.
+Nothing overwrites your `tab:flagcolor`.
 
 ---
 
-## Step 5: Show multi-tab awareness
+## Step 6: Wrap up
 
 Print:
 
-> "Tab indicators work across tabs. Even if you switch away, you can see which session needs attention from the tab bar."
-
-Then stop.
-
----
-
-## Step 6: Show the denial case
-
-Print:
-
-> "If you deny a permission, the cyan indicator stays visible until you respond — so you don't lose track."
-
-Then run this bash command:
-
-```bash
-echo "This command should be DENIED by the user"
-```
-
-The user will deny this. After denial, print:
-
-> "The indicator persists after denial. It clears when you type your next message."
-
-Then stop.
-
----
-
-## Step 7: Wrap up
-
-Print:
-
-> "Two colors. Zero noise. Install with: npx wave-claude-visual-alerts setup"
+> "One flag. Clears itself. Install with: npx wave-claude-visual-alerts setup"
 
 Then stop.

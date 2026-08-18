@@ -1,7 +1,7 @@
 {
   "name": "wave-claude-visual-alerts",
-  "version": "0.1.0",
-  "description": "Color-coded Wave Terminal border alerts for Claude Code — highlights blocks, tabs, and backgrounds when Claude needs your attention",
+  "version": "0.2.0",
+  "description": "Flags the Wave Terminal tab when Claude Code needs your input or finishes a task — clears itself when you focus the tab",
   "type": "module",
   "bin": {
     "wave-claude-visual-alerts": "./bin/cli.js"

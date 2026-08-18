@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync, copyFileSync, chmodSync, rmSync, readdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, copyFileSync, chmodSync, rmSync, readdirSync } from 'fs'
 import { join, resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { homedir } from 'os'
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
 import {
   findSettingsPath,
   loadSettings,
@@ -14,7 +14,6 @@ import {
   saveSettings,
   countRegisteredEvents,
 } from '../lib/settings.js'
-import { THEMES, DEFAULT_THEME, VALID_OPACITIES, DEFAULT_OPACITY } from '../lib/themes.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
@@ -23,407 +22,204 @@ const INSTALL_DIR = join(homedir(), '.wave-alerts')
 const HOOKS_DIR = join(INSTALL_DIR, 'hooks')
 const INSTALLED_HOOK = join(HOOKS_DIR, 'wave-alert-hook.sh')
 const SOURCE_HOOK = join(ROOT, 'hooks', 'wave-alert-hook.sh')
-const CONFIG_FILE = join(INSTALL_DIR, 'config.json')
-const STATE_DIR = '/tmp/wave-alerts'
 const HOOK_TIMEOUT = 3
 
-// Events with matcher: '*' (tool-scoped)
-const MATCHER_EVENTS = ['PostToolUse', 'PostToolUseFailure', 'PermissionRequest']
-// Events without matcher
-const PLAIN_EVENTS = ['Stop', 'UserPromptSubmit', 'SessionStart', 'SessionEnd']
-const ALL_EVENTS = [...MATCHER_EVENTS, ...PLAIN_EVENTS]
+// Claude Code event -> argument passed to the hook script.
+// PermissionRequest is tool-scoped so it needs a matcher; Stop is not.
+const EVENTS = [
+  { event: 'PermissionRequest', arg: 'input', matcher: '*' },
+  { event: 'Stop', arg: 'done' },
+]
 
-// ─── Helpers ───
+const COLOR_INPUT = '#FF9500' // orange — Claude needs a permission decision
+const COLOR_DONE = '#00FFDB'  // teal   — Claude finished the turn
 
-function log(msg) { console.log(msg) }
-function ok(msg) { log(`  ✓ ${msg}`) }
-function warn(msg) { log(`  ⚠ ${msg}`) }
-function fail(msg) { log(`  ✗ ${msg}`) }
+const log = (m) => console.log(m)
+const ok = (m) => log(`  ✓ ${m}`)
+const fail = (m) => log(`  ✗ ${m}`)
 
 function findWsh() {
   const paths = [
     join(homedir(), 'Library', 'Application Support', 'waveterm', 'bin', 'wsh'),
     join(homedir(), '.waveterm', 'bin', 'wsh'),
   ]
-  for (const p of paths) {
-    if (existsSync(p)) return p
-  }
+  for (const p of paths) if (existsSync(p)) return p
   try {
-    return execSync('command -v wsh', { encoding: 'utf-8' }).trim()
+    return execFileSync('command', ['-v', 'wsh'], { encoding: 'utf-8', shell: true }).trim() || null
   } catch {
     return null
   }
 }
 
-function findJq() {
-  try {
-    return execSync('command -v jq', { encoding: 'utf-8' }).trim()
-  } catch {
-    return null
-  }
-}
-
-// ─── Config helpers ───
-
-function loadConfig() {
-  if (!existsSync(CONFIG_FILE)) return {}
-  try {
-    return JSON.parse(readFileSync(CONFIG_FILE, 'utf-8'))
-  } catch {
-    return {}
-  }
-}
-
-function saveConfig(config) {
-  mkdirSync(INSTALL_DIR, { recursive: true })
-  writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + '\n')
-}
-
-function parseConfigFlags(args) {
-  const updates = {}
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]
-    if (arg === '--theme') {
-      const val = args[++i]
-      if (!val || !THEMES[val]) {
-        log(`\n  Error: Invalid theme "${val}". Available: ${Object.keys(THEMES).join(', ')}\n`)
-        process.exit(1)
-      }
-      updates.theme = val
-    } else if (arg === '--bg-opacity') {
-      const val = parseFloat(args[++i])
-      if (!VALID_OPACITIES.includes(val)) {
-        log(`\n  Error: Invalid opacity "${args[i]}". Allowed: ${VALID_OPACITIES.join(', ')}\n`)
-        process.exit(1)
-      }
-      updates.bgOpacity = val
-    } else if (arg === '--no-bg') {
-      updates.bgEnabled = false
-    } else if (arg === '--bg') {
-      updates.bgEnabled = true
-    }
-  }
-  return updates
-}
-
-function getEffectiveColors(config) {
-  const themeName = config.theme || DEFAULT_THEME
-  const theme = THEMES[themeName]
-  return {
-    stop: config.colors?.stop || theme.colors.stop,
-    permission: config.colors?.permission || theme.colors.permission,
-  }
-}
-
-// ─── Commands ───
-
-async function runSetup(args) {
+function runSetup() {
   log('\n🌊 wave-claude-visual-alerts setup\n')
 
-  // 1. Check prerequisites
   const wsh = findWsh()
-  const jq = findJq()
-  if (wsh) {
-    ok(`wsh found: ${wsh}`)
-  } else {
-    warn('wsh not found — install Wave Terminal first (https://waveterm.dev)')
-  }
-  if (jq) {
-    ok(`jq found: ${jq}`)
-  } else {
-    warn('jq not found — install it: brew install jq (macOS) or apt install jq (Linux)')
-  }
-  log('')
+  wsh ? ok(`wsh found: ${wsh}`)
+      : fail('wsh not found — install Wave Terminal first (https://waveterm.dev)')
 
-  // 2. Create install directory
   mkdirSync(HOOKS_DIR, { recursive: true })
-
-  // 3. Copy hook script
   copyFileSync(SOURCE_HOOK, INSTALLED_HOOK)
   chmodSync(INSTALLED_HOOK, 0o755)
   ok(`Hook installed: ${INSTALLED_HOOK}`)
 
-  // 4. Apply config flags if any
-  const flagUpdates = parseConfigFlags(args)
-  if (Object.keys(flagUpdates).length > 0) {
-    const config = { ...loadConfig(), ...flagUpdates }
-    saveConfig(config)
-    ok(`Config updated: ${CONFIG_FILE}`)
-  }
-
-  // 5. Read settings.json
   const settingsPath = findSettingsPath()
   let settings = loadSettings(settingsPath)
 
-  // 6. Backup
   const backupPath = backupSettings(settingsPath)
-  if (backupPath) {
-    ok(`Settings backed up: ${backupPath}`)
-  }
+  if (backupPath) ok(`Settings backed up: ${backupPath}`)
 
-  // 7. Add hook entries
-  for (const event of MATCHER_EVENTS) {
-    settings = addHookEntry(settings, event, INSTALLED_HOOK, {
-      matcher: '*',
+  for (const { event, arg, matcher } of EVENTS) {
+    settings = addHookEntry(settings, event, `${INSTALLED_HOOK} ${arg}`, {
+      matcher,
       timeout: HOOK_TIMEOUT,
     })
   }
-  for (const event of PLAIN_EVENTS) {
-    settings = addHookEntry(settings, event, INSTALLED_HOOK, {
-      timeout: HOOK_TIMEOUT,
-    })
-  }
-
-  // 8. Write settings
   saveSettings(settingsPath, settings)
   ok(`Settings updated: ${settingsPath}`)
 
-  // 9. Summary
-  log(`\n  Registered ${ALL_EVENTS.length} hook events:`)
-  for (const e of ALL_EVENTS) {
-    log(`    • ${e}`)
-  }
-
-  // Show active config
-  const config = loadConfig()
-  const themeName = config.theme || DEFAULT_THEME
-  const theme = THEMES[themeName]
-  const colors = getEffectiveColors(config)
-  const bgEnabled = config.bgEnabled !== false
-  const bgOpacity = config.bgOpacity ?? DEFAULT_OPACITY
-
-  log(`\n  Theme: ${theme.label} (${themeName})`)
-  log(`  Background tint: ${bgEnabled ? `enabled (opacity ${bgOpacity})` : 'disabled'}`)
-  log('\n  Alert colors:')
-  log(`    • Stop         ${colors.stop} — task complete, your turn`)
-  log(`    • Permission   ${colors.permission} — permission needed`)
-
-  log('\n  Customize: wave-claude-visual-alerts config --theme <name>')
-  log(`  Available themes: ${Object.keys(THEMES).join(', ')}\n`)
-  log('  ✅ Setup complete! Restart Claude Code for hooks to take effect.\n')
+  log('\n  Registered 2 hook events:')
+  log(`    • PermissionRequest  → orange flag ${COLOR_INPUT}  (Claude needs you)`)
+  log(`    • Stop               → teal flag   ${COLOR_DONE}  (task done)`)
+  log('\n  The flag clears itself when you focus the tab — Wave handles that.')
+  log('  Override colors with WAVE_ALERT_COLOR_INPUT / WAVE_ALERT_COLOR_DONE.')
+  log('\n  Try it:  npx wave-claude-visual-alerts test')
+  log('\n  ✅ Setup complete! Restart Claude Code for hooks to take effect.\n')
 }
 
-async function runUninstall() {
+function runUninstall() {
   log('\n🌊 wave-claude-visual-alerts uninstall\n')
 
-  // 1. Read settings
   const settingsPath = findSettingsPath()
-  if (!existsSync(settingsPath)) {
-    log('  No settings.json found — nothing to uninstall.\n')
-    return
+  if (existsSync(settingsPath)) {
+    let settings = loadSettings(settingsPath)
+    const backupPath = backupSettings(settingsPath)
+    if (backupPath) ok(`Settings backed up: ${backupPath}`)
+
+    const before = countRegisteredEvents(settings)
+    settings = removeHookEntries(settings)
+    saveSettings(settingsPath, settings)
+    ok(`Removed ${before - countRegisteredEvents(settings)} hook entries`)
+  } else {
+    log('  No settings.json found.')
   }
 
-  let settings = loadSettings(settingsPath)
-
-  // 2. Backup
-  const backupPath = backupSettings(settingsPath)
-  if (backupPath) {
-    ok(`Settings backed up: ${backupPath}`)
-  }
-
-  // 3. Remove hook entries
-  const before = countRegisteredEvents(settings)
-  settings = removeHookEntries(settings)
-  const after = countRegisteredEvents(settings)
-
-  // 4. Write settings
-  saveSettings(settingsPath, settings)
-  ok(`Removed ${before - after} hook entries from settings.json`)
-
-  // 5. Remove hook script
   if (existsSync(INSTALLED_HOOK)) {
     rmSync(INSTALLED_HOOK)
     ok(`Removed: ${INSTALLED_HOOK}`)
   }
-
-  // Clean hooks dir if empty
   try {
     if (existsSync(HOOKS_DIR) && readdirSync(HOOKS_DIR).length === 0) {
       rmSync(HOOKS_DIR, { recursive: true })
+      rmSync(INSTALL_DIR, { recursive: true, force: true })
     }
-  } catch { /* ignore */ }
+  } catch { /* leave it */ }
 
-  // 6. Clean state dir
-  if (existsSync(STATE_DIR)) {
-    rmSync(STATE_DIR, { recursive: true, force: true })
-    ok('Cleaned state directory: /tmp/wave-alerts/')
-  }
-
-  log('\n  Note: ~/.wave-alerts/config.json preserved (if it exists).')
-  log('  To fully remove: rm -rf ~/.wave-alerts\n')
+  log('\n  Note: tabs you flagged by hand are untouched — this tool never\n  writes tab:flagcolor.\n')
   log('  ✅ Uninstall complete! Restart Claude Code.\n')
 }
 
-async function runDoctor() {
+function runDoctor() {
   log('\n🌊 wave-claude-visual-alerts doctor\n')
   let allGood = true
 
-  // 1. wsh binary
-  log('[1/5] Checking wsh binary...')
+  log('[1/3] Checking wsh...')
   const wsh = findWsh()
   if (wsh) {
     try {
-      const ver = execSync(`"${wsh}" version`, { encoding: 'utf-8' }).trim()
-      ok(`${ver} (${wsh})`)
+      ok(`${execFileSync(wsh, ['version'], { encoding: 'utf-8' }).trim()} (${wsh})`)
     } catch {
-      ok(`Found: ${wsh} (could not get version — Wave may not be running)`)
+      ok(`Found: ${wsh} (could not get version — is Wave running?)`)
     }
   } else {
     fail('wsh not found — install Wave Terminal (https://waveterm.dev)')
     allGood = false
   }
 
-  // 2. jq
-  log('[2/5] Checking jq...')
-  const jq = findJq()
-  if (jq) {
-    try {
-      const ver = execSync('jq --version', { encoding: 'utf-8' }).trim()
-      ok(ver)
-    } catch {
-      ok(`Found: ${jq}`)
-    }
-  } else {
-    fail('jq not found — brew install jq (macOS) or apt install jq (Linux)')
-    allGood = false
-  }
-
-  // 3. Hook script
-  log('[3/5] Checking hook script...')
+  log('[2/3] Checking hook script...')
   if (existsSync(INSTALLED_HOOK)) {
     ok(INSTALLED_HOOK)
   } else {
-    fail(`Not found: ${INSTALLED_HOOK} — run "wave-claude-visual-alerts setup"`)
+    fail(`Not found: ${INSTALLED_HOOK} — run "setup"`)
     allGood = false
   }
 
-  // 4. Settings.json
-  log('[4/5] Checking settings.json...')
+  log('[3/3] Checking settings.json...')
   const settingsPath = findSettingsPath()
   if (existsSync(settingsPath)) {
-    try {
-      const settings = loadSettings(settingsPath)
-      const count = countRegisteredEvents(settings)
-      if (count === ALL_EVENTS.length) {
-        ok(`All ${count} events registered in ${settingsPath}`)
-      } else {
-        warn(`${count}/${ALL_EVENTS.length} events registered — run "wave-claude-visual-alerts setup" to fix`)
-        allGood = false
-      }
-    } catch (e) {
-      fail(`Error parsing settings: ${e.message}`)
+    const count = countRegisteredEvents(loadSettings(settingsPath))
+    if (count === EVENTS.length) {
+      ok(`Both events registered in ${settingsPath}`)
+    } else {
+      fail(`${count}/${EVENTS.length} events registered — run "setup"`)
       allGood = false
     }
   } else {
-    fail(`Not found: ${settingsPath} — run "wave-claude-visual-alerts setup"`)
+    fail(`Not found: ${settingsPath} — run "setup"`)
     allGood = false
   }
 
-  // 5. Config file
-  log('[5/5] Checking config...')
-  const config = loadConfig()
-  if (existsSync(CONFIG_FILE)) {
-    const themeName = config.theme || DEFAULT_THEME
-    const bgEnabled = config.bgEnabled !== false
-    const bgOpacity = config.bgOpacity ?? DEFAULT_OPACITY
-    ok(`Theme: ${themeName}, BG: ${bgEnabled ? `on (${bgOpacity})` : 'off'}`)
-  } else {
-    ok(`Using defaults (theme: ${DEFAULT_THEME}, bg: on, opacity: ${DEFAULT_OPACITY})`)
-  }
-
-  log('')
-  if (allGood) {
-    log('  ✅ Everything looks good!\n')
-  } else {
-    log('  ⚠  Some issues found. Fix them and run doctor again.\n')
-  }
+  log(allGood ? '\n  ✅ Everything looks good!\n'
+              : '\n  ⚠  Some issues found. Fix them and run doctor again.\n')
 }
 
-async function runConfig(args) {
-  log('\n🌊 wave-claude-visual-alerts config\n')
-
-  const flagUpdates = parseConfigFlags(args)
-
-  if (Object.keys(flagUpdates).length > 0) {
-    // Update mode
-    const config = { ...loadConfig(), ...flagUpdates }
-    saveConfig(config)
-    ok(`Config saved: ${CONFIG_FILE}`)
+function runTest() {
+  log('\n🌊 wave-claude-visual-alerts test\n')
+  const tabId = process.env.WAVETERM_TABID
+  if (!tabId) {
+    fail('Not running inside a Wave tab (WAVETERM_TABID unset).')
     log('')
+    return
   }
-
-  // Display current config
-  const config = loadConfig()
-  const themeName = config.theme || DEFAULT_THEME
-  const theme = THEMES[themeName]
-  const colors = getEffectiveColors(config)
-  const bgEnabled = config.bgEnabled !== false
-  const bgOpacity = config.bgOpacity ?? DEFAULT_OPACITY
-
-  log(`  Theme:      ${theme.label} (${themeName})`)
-  log(`  Background: ${bgEnabled ? `enabled, opacity ${bgOpacity}` : 'disabled'}`)
-  log('')
-  log('  Colors:')
-  log(`    stop         ${colors.stop}`)
-  log(`    permission   ${colors.permission}`)
-
-  if (config.colors && Object.keys(config.colors).length > 0) {
-    log(`\n  Custom overrides: ${Object.keys(config.colors).join(', ')}`)
+  const wsh = findWsh()
+  if (!wsh) {
+    fail('wsh not found.')
+    log('')
+    return
   }
-
-  log('\n  Available themes:')
-  for (const [name, t] of Object.entries(THEMES)) {
-    const marker = name === themeName ? ' ◀' : ''
-    log(`    ${name.padEnd(10)} ${t.description}${marker}`)
-  }
-
-  log(`\n  Opacity options: ${VALID_OPACITIES.join(', ')}`)
-  log(`\n  Config file: ${CONFIG_FILE}`)
-  log(`  Changes take effect on next Claude Code hook trigger (no restart needed).\n`)
+  // Real alerts auto-clear on focus, which you cannot see on the tab you are
+  // looking at. Pid-link the badge to a short sleep so it stays put.
+  const holder = execFileSync('/bin/sh', ['-c', 'sleep 20 >/dev/null 2>&1 & echo $!'], {
+    encoding: 'utf-8',
+  }).trim()
+  execFileSync(wsh, ['badge', 'flag', '--color', COLOR_INPUT, '--pid', holder,
+                     '-b', `tab:${tabId}`])
+  ok(`Orange flag on this tab for 20s (${COLOR_INPUT}).`)
+  log('  If you had flagged this tab by hand, your color is now the small dot')
+  log('  beside it, and returns to the main slot when the alert expires.\n')
 }
 
 function printHelp() {
   log(`
-🌊 wave-claude-visual-alerts — Visual alerts for Claude Code in Wave Terminal
+🌊 wave-claude-visual-alerts — flag the Wave tab when Claude wants you
 
-Usage: wave-claude-visual-alerts <command> [options]
+Usage: wave-claude-visual-alerts <command>
 
 Commands:
-  setup       Install hook and register in Claude Code settings
-  uninstall   Remove hook and deregister from settings
-  config      View or update configuration
-  doctor      Check dependencies and configuration
+  setup       Install the hook and register it in Claude Code settings
+  uninstall   Remove the hook and deregister it
+  doctor      Check wsh, the hook script, and settings registration
+  test        Show the alert flag on the current tab for 20s
 
-Setup / Config options:
-  --theme <name>       Set color theme (${Object.keys(THEMES).join(', ')})
-  --bg-opacity <val>   Set background tint opacity (${VALID_OPACITIES.join(', ')})
-  --no-bg              Disable background tint
-  --bg                 Enable background tint
+Alerts:
+  orange flag ${COLOR_INPUT}   Claude needs a permission decision
+  teal flag   ${COLOR_DONE}   Claude finished the turn
 
-General:
-  --help, -h           Show this help
-  --version, -v        Show version
+The flag clears itself when you focus the tab. Colors can be overridden with
+WAVE_ALERT_COLOR_INPUT / WAVE_ALERT_COLOR_DONE.
 `)
 }
 
-function printVersion() {
-  log('wave-claude-visual-alerts v0.1.0')
-}
-
-// ─── Main ───
-
-const args = process.argv.slice(2)
-const command = args[0]
-const cmdArgs = args.slice(1)
+const command = process.argv[2]
 
 try {
   switch (command) {
-    case 'setup':     await runSetup(cmdArgs); break
-    case 'uninstall': await runUninstall(); break
-    case 'config':    await runConfig(cmdArgs); break
-    case 'doctor':    await runDoctor(); break
+    case 'setup':     runSetup(); break
+    case 'uninstall': runUninstall(); break
+    case 'doctor':    runDoctor(); break
+    case 'test':      runTest(); break
+    case '--version': case '-v': log('wave-claude-visual-alerts v0.2.0'); break
     case '--help': case '-h': case undefined: printHelp(); break
-    case '--version': case '-v': printVersion(); break
     default:
       log(`Unknown command: ${command}`)
       printHelp()

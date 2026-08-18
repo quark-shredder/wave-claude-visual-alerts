@@ -1,6 +1,8 @@
 # wave-claude-visual-alerts
 
-Color-coded visual alerts for [Claude Code](https://claude.ai/claude-code) running in [Wave Terminal](https://waveterm.dev). Never miss when Claude finishes a task or needs permission — block borders, tab indicators, and background tints light up with priority-based colors so you always know where to look, even across multiple tabs and windows.
+Flags the [Wave Terminal](https://waveterm.dev) tab when [Claude Code](https://claude.ai/claude-code) needs your input or finishes a task. The flag clears itself the moment you focus the tab.
+
+Built for the case where you have eight or more Wave tabs open and need to know *which one* wants you.
 
 ## Quick Start
 
@@ -12,124 +14,93 @@ Then restart Claude Code.
 
 ## What It Does
 
-Three visual layers alert you when Claude needs attention:
+Two events, one flag icon in the tab bar:
 
-| Layer | Scope | Visible when... |
-|-------|-------|-----------------|
-| **Block border** | Single block | Always (focused + unfocused) |
-| **Tab badge** | Tab header dot | Persists on inactive tabs, auto-clears on active tab |
-| **Tab background** | Subtle tint | Tab is active |
+| Alert | Color | Fires on | Meaning |
+|-------|-------|----------|---------|
+| 🟠 Orange flag | `#FF9500` | `PermissionRequest` | Claude needs a permission decision |
+| 🟦 Teal flag | `#00FFDB` | `Stop` | Claude finished the turn |
 
-On the **active tab**, border color and background tint tell you what's happening. On **inactive tabs**, the colored badge dot draws your attention to switch there.
+**Clearing is not our job.** Wave ≥ 0.14.2 ships a `BadgeAutoClearing` component that removes a tab badge about 500 ms after you focus that tab (3 s if you were already sitting on it). So there are no clear-hooks, no state directory, and no way for a stale flag to get stuck.
 
-### Alert Colors
+## Plays Nicely With Manually Flagged Tabs
 
-| Color | Hex | Trigger | Priority |
-|-------|-----|---------|----------|
-| Purple | `#AB47BC` | Task complete (`Stop`) | 1 |
-| Cyan | `#00BCD4` | Permission needed | 4 |
+If you use Wave's **Flag Tab** right-click menu to colour-code your tabs, this tool will not disturb it. It never writes `tab:flagcolor`.
 
-Higher priority alerts take precedence. When the highest clears, it falls back to the next.
+Wave renders your manual flag as a synthetic badge at `priority: 0` and merges it with real badges, sorted highest-priority-first. Alert badges default to `priority: 10`, so:
 
-### Clear Triggers
+- **Normally** — your manual flag owns the 12 px icon slot.
+- **During an alert** — the alert flag takes the main slot; your colour demotes to a 4 px dot beside it.
+- **After it clears** — your manual flag returns to the main slot, untouched.
 
-- **You type a prompt** → all alerts clear
-- **Tool runs after approval** → permission alert clears
-- **Session ends** (`/exit`) → all alerts clear
+Override and restore, with nothing saved or written back.
 
 ## Commands
 
 ```bash
-npx wave-claude-visual-alerts setup                    # Install with defaults
-npx wave-claude-visual-alerts setup --theme nord       # Install with Nord theme
-npx wave-claude-visual-alerts setup --no-bg            # Install without background tint
-npx wave-claude-visual-alerts setup --bg-opacity 0.20  # Install with custom opacity
-
-npx wave-claude-visual-alerts config                   # View current configuration
-npx wave-claude-visual-alerts config --theme light     # Switch to Light theme
-npx wave-claude-visual-alerts config --bg-opacity 0.15 # Change opacity
-npx wave-claude-visual-alerts config --no-bg           # Disable background tint
-npx wave-claude-visual-alerts config --bg              # Re-enable background tint
-
-npx wave-claude-visual-alerts uninstall                # Remove hook + deregister
-npx wave-claude-visual-alerts doctor                   # Check dependencies and configuration
+npx wave-claude-visual-alerts setup      # Install hook + register in settings.json
+npx wave-claude-visual-alerts uninstall  # Deregister + remove hook
+npx wave-claude-visual-alerts doctor     # Check wsh, hook script, registration
+npx wave-claude-visual-alerts test       # Show the flag on this tab for 20s
 ```
+
+`test` pins the badge to a short-lived pid so auto-clear skips it — otherwise you could never see an alert on the tab you are looking at.
 
 ## Requirements
 
-- [Wave Terminal](https://waveterm.dev) (v0.14+)
-- [Claude Code](https://claude.ai/claude-code)
-- [jq](https://jqlang.github.io/jq/) — `brew install jq` (macOS) or `apt install jq` (Linux)
+- [Wave Terminal](https://waveterm.dev) **v0.14.2+** (needs badge auto-clearing)
+- [Claude Code](https://claude.ai/claude-code) v2.x (needs the `PermissionRequest` event)
 - Node.js 18+
 
-## Themes
-
-Three built-in color themes to match your Wave Terminal theme:
-
-| Theme | Best for | Stop | Permission |
-|-------|----------|------|------------|
-| **vibrant** (default) | Dark themes (One Dark Pro, Dracula) | `#AB47BC` | `#00BCD4` |
-| **nord** | Nord / Arctic themes | `#B48EAD` | `#88C0D0` |
-| **light** | Light themes | `#7B1FA2` | `#D84315` |
-
-Set a theme during setup or anytime after:
-
-```bash
-npx wave-claude-visual-alerts setup --theme nord
-npx wave-claude-visual-alerts config --theme light
-```
+No `jq`. No config file.
 
 ## Customization
 
-Configuration is stored in `~/.wave-alerts/config.json`. Use CLI flags or edit directly:
+Two environment variables, read at hook time:
 
-```json
-{
-  "theme": "vibrant",
-  "bgEnabled": true,
-  "bgOpacity": 0.10,
-  "colors": {
-    "stop": "#AB47BC"
-  }
-}
+```bash
+export WAVE_ALERT_COLOR_INPUT="#FF453A"   # permission needed
+export WAVE_ALERT_COLOR_DONE="#58C142"    # task done
 ```
 
-All fields are optional — defaults are used for any missing values.
-
-**Precedence:** `theme` sets base colors → `colors.*` overrides individual colors.
-
-### Background tint
-
-The subtle background tint can be configured:
-
-- **Opacity:** `0.05`, `0.10` (default), `0.15`, `0.20`, `0.25`, `0.30`
-- **Disable entirely:** `--no-bg` flag or `"bgEnabled": false`
-
-Config changes take effect on the next hook trigger (no restart needed).
+Defaults are orange and teal — two entries from Wave's own flag palette that are easy to tell apart from the green/blue/purple most people use for manual tab flags. Any hex (`#RRGGBB`, `#RRGGBBAA`) or CSS colour name works.
 
 ## How It Works
 
-The package installs a bash hook script at `~/.wave-alerts/hooks/wave-alert-hook.sh` and registers it in Claude Code's `~/.claude/settings.json` for 7 hook events:
+`setup` writes `~/.wave-alerts/hooks/wave-alert-hook.sh` and registers it in `~/.claude/settings.json` for two events. The event name is passed as an **argument** rather than parsed from the stdin JSON, which is why the hook needs no `jq`:
 
-`PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `Stop`, `UserPromptSubmit`, `SessionStart`, `SessionEnd`
+```json
+{
+  "PermissionRequest": [{ "matcher": "*", "hooks": [{ "type": "command",
+      "command": "~/.wave-alerts/hooks/wave-alert-hook.sh input", "timeout": 3 }] }],
+  "Stop": [{ "hooks": [{ "type": "command",
+      "command": "~/.wave-alerts/hooks/wave-alert-hook.sh done", "timeout": 3 }] }]
+}
+```
 
-The hook uses Wave Terminal's `wsh` CLI to set block metadata (`frame:activebordercolor`, `frame:bordercolor`), tab indicators (`wsh tabindicator`), and tab backgrounds (`wsh setbg`).
+The hook is ~20 lines of logic. It reads `WAVETERM_TABID` from the environment, exits silently if unset (so it is harmless outside Wave), and runs:
 
-State is tracked per-block in `/tmp/wave-alerts/{tabid}/{blockid}` for priority-based fallback across multiple Claude sessions.
+```bash
+wsh badge flag --color "$color" -b "tab:$WAVETERM_TABID"
+```
+
+The badge is set on the **tab** rather than the block, so focusing the tab clears it no matter which pane inside is focused.
+
+### Known limitation
+
+One badge exists per tab, so two Claude sessions in the *same* tab share one flag and the most recent event wins. One session per tab — the usual layout — is unaffected.
 
 ## Coexistence
 
-Works alongside other Claude Code hooks (like [peon-ping](https://github.com/PeonPing/peon-ping) and [vibecraft](https://github.com/anthropics/vibecraft)). The setup command only adds/removes its own entries and never touches other hooks.
+`setup` only adds and removes its own entries, matched by the `wave-alert-hook` filename, and backs up `settings.json` first. Other hooks are never touched.
 
 ## Troubleshooting
 
-Run `npx wave-claude-visual-alerts doctor` to check your setup.
+Run `npx wave-claude-visual-alerts doctor`.
 
-**Tab indicator not clearing?** State files may be stale. Run `rm -rf /tmp/wave-alerts/` to clean up.
+**No flag appears?** Confirm `echo $WAVETERM_TABID` is non-empty in the Claude Code pane. Hooks inherit the shell environment, so a Claude Code started outside Wave will not have it.
 
-**Colors not showing?** Make sure Wave Terminal is running and `wsh` is accessible.
-
-**Wrong colors?** Check `~/.wave-alerts/config.json` for typos in hex values.
+**Flag vanishes too quickly?** Expected on the tab you are already viewing — Wave clears it after 3 s. On inactive tabs it persists until you switch there.
 
 ## License
 
