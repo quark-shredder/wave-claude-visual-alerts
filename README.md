@@ -45,7 +45,8 @@ A working tab should never compete for attention with a blocked one. Only the st
 
 | State | Claude Code event | Icon | Colour | Meaning |
 |---|---|---|---|---|
-| `busy` | `UserPromptSubmit`, `PreToolUse` | `spinner+spin` | 🔵 `#429DFF` | Claude is working |
+| `turnstart` | `UserPromptSubmit` | — | — | Clears a spinner left by an interrupted turn |
+| `busy` | `PreToolUse` | `spinner+spin` | 🔵 `#429DFF` | Claude is working |
 | `input` | `PermissionRequest` | `hand+beat` | 🟠 `#FF9500` | Needs a permission decision |
 | `waiting` | `Notification` | `circle-question+fade` | 🟡 `#FFE900` | Idle, waiting on you |
 | `mcp` | `Elicitation` | `message-question+beat` | 🟣 `#BF55EC` | An MCP server wants input |
@@ -64,7 +65,11 @@ Wave allows **one badge per object**, so a naive implementation has every state 
 - **Alerts go on the tab.** Wave ≥ 0.14.2 ships a `BadgeAutoClearing` component that removes a tab badge ~500 ms after you focus that tab (3 s if you were already there). So there are no clear-hooks, no state directory, and no way for a stale alert to stick.
 - **The busy spinner goes on the block**, pinned to a sentinel process via `wsh badge --pid`. Pid-linked badges are explicitly skipped by auto-clear, so the spinner survives you looking at the tab — and reappears as the main icon once a higher-priority alert clears.
 
-`busy` fires on **both** `UserPromptSubmit` and `PreToolUse`. The second is necessary because a turn started with a `!` bash command never fires `UserPromptSubmit`, and would otherwise run with no spinner at all. Since `PreToolUse` fires on every tool call, the already-spinning path must be cheap: the sentinel's pid is kept in `~/.wave-alerts/run/<tabid>.pid`, so the check is a file read plus `kill -0` — **3 ms**, against 17 ms for `pgrep` alone. A stale or garbage pid file is ignored and respawned. `Stop`, `StopFailure` and `SessionEnd` kill the sentinel and remove the file, verifying the process is really ours first, since pids get recycled.
+`busy` fires on `PreToolUse` rather than `UserPromptSubmit`, because a turn started with a `!` bash command never fires the latter and would otherwise run with no spinner at all. Since `PreToolUse` fires on every tool call, the already-spinning path must be cheap: the sentinel's pid is kept in `~/.wave-alerts/run/<tabid>.pid`, so the check is a file read plus `kill -0` — **3 ms**, against 17 ms for `pgrep` alone. A stale or garbage pid file is ignored and respawned.
+
+**Claude Code fires no hook event when you interrupt a turn with Esc.** This is verified, not assumed — logging every hook invocation across two interrupts produced nothing at all, no `Stop` and no `StopFailure`. So an interrupted turn leaves its sentinel running and the tab goes on claiming to work. `turnstart` handles it on the next `UserPromptSubmit`, since a new prompt proves the previous turn ended. It deliberately sets no badge: leaving the respawn to the first `PreToolUse` puts time between the kill and the new badge, so Wave's asynchronous clear-by-oref cannot race it.
+
+The gap this leaves is an interrupted turn you then walk away from — that tab keeps spinning until you return and type. Nothing can close it without an interrupt event to hook. `Stop`, `StopFailure` and `SessionEnd` kill the sentinel and remove the file, verifying the process is really ours first, since pids get recycled.
 
 Badges sort by priority, highest first. Alerts are 10 (failures 15); the pid-linked spinner defaults to 5. So an alert takes the 12 px icon slot and the spinner demotes to a 4 px dot beside it, then returns when the alert clears.
 

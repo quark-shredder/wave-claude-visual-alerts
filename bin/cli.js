@@ -28,9 +28,11 @@ const HOOK_TIMEOUT = 3
 // Claude Code event -> argument passed to the hook script.
 // Only events that support a matcher get one; Stop and UserPromptSubmit do not.
 const EVENTS = [
-  { event: 'UserPromptSubmit', arg: 'busy' },
-  // A turn started with a `!` bash command never fires UserPromptSubmit, so
-  // PreToolUse arms the spinner too. It exits in ~5ms when already spinning.
+  // Esc fires no hook event at all, so an interrupted turn leaves its sentinel
+  // running. A new prompt proves the previous turn ended: clear it there.
+  { event: 'UserPromptSubmit', arg: 'turnstart' },
+  // Arms the spinner. Also covers turns started with a `!` bash command, which
+  // never fire UserPromptSubmit. Exits in ~3ms when already spinning.
   { event: 'PreToolUse', arg: 'busy', matcher: '*' },
   { event: 'PermissionRequest', arg: 'input', matcher: '*' },
   { event: 'Notification', arg: 'waiting', matcher: 'idle_prompt|agent_needs_input' },
@@ -42,7 +44,7 @@ const EVENTS = [
 
 // Colour carries urgency, animation carries kind. See README.
 const SCHEME = [
-  ['busy',     'UserPromptSubmit/PreToolUse', 'spinner+spin',   '#429DFF', 'working, no action'],
+  ['busy',     'PreToolUse',        'spinner+spin',          '#429DFF', 'working, no action'],
   ['input',    'PermissionRequest', 'hand+beat',             '#FF9500', 'needs a permission decision'],
   ['waiting',  'Notification',      'circle-question+fade',  '#FFE900', 'idle, waiting on you'],
   ['mcp',      'Elicitation',       'message-question+beat', '#BF55EC', 'an MCP server wants input'],
@@ -215,7 +217,7 @@ function runTest() {
 
 function printHelp() {
   log(`
-🌊 wave-claude-visual-alerts — flag the Wave tab when Claude wants you
+🌊 wave-claude-visual-alerts — a live status board for Claude Code in Wave
 
 Usage: wave-claude-visual-alerts <command>
 
