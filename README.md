@@ -170,6 +170,8 @@ Run `npx wave-claude-visual-alerts doctor`.
 
 **Spinner stuck after a crash?** `pkill -f wave-alert-busy` clears any orphaned sentinel.
 
+**Spinner disappeared while Claude was still working?** Fixed in 1.0.0. Wave clears badges by object, not by badge id, and does so asynchronously when a watched process exits — so killing the old sentinel raced the new badge and wiped it. `busy` now reuses a live sentinel instead of respawning one.
+
 ## License
 
 MIT

@@ -91,7 +91,7 @@ function runSetup() {
   settings = removeHookEntries(settings)
 
   for (const { event, arg, matcher } of EVENTS) {
-    settings = addHookEntry(settings, event, `${INSTALLED_HOOK} ${arg}`, {
+    settings = addHookEntry(settings, event, `"${INSTALLED_HOOK}" ${arg}`, {
       matcher,
       timeout: HOOK_TIMEOUT,
     })
@@ -200,10 +200,13 @@ function runTest() {
     log(`    ${arg.padEnd(9)} ${icon.padEnd(23)} ${color.padEnd(8)} ${meaning}`)
   }
   log('')
-  // Alerts auto-clear on focus, so hold each one with a pid link while it shows.
-  const script = states.map(([arg]) =>
-    `"${hook}" ${arg}; sleep 4`).join('; ')
-  execFileSync('/bin/sh', ['-c', `${script}; "${hook}" end`], { stdio: 'ignore' })
+  // No shell: each state is exec'd directly so a path with spaces or shell
+  // metacharacters cannot be reinterpreted as code.
+  for (const [arg] of states) {
+    execFileSync(hook, [arg], { stdio: 'ignore' })
+    execFileSync('/bin/sleep', ['4'], { stdio: 'ignore' })
+  }
+  execFileSync(hook, ['end'], { stdio: 'ignore' })
   ok('Cycle complete — everything cleared.\n')
 }
 
