@@ -10,7 +10,6 @@
 #   mcp       message-question     purple  an MCP server wants input
 #   done      circle-check         green   turn finished
 #   failed    triangle-exclamation red     turn died on an API error
-#   subagent  robot                blue    a subagent finished
 #   end       -                    -       session over: clean up
 #
 # Two objects, deliberately:
@@ -69,9 +68,6 @@ case "$1" in
   failed)
     kill_sentinel
     alert "${WAVE_ALERT_ICON_FAILED:-triangle-exclamation+beat}" "${WAVE_ALERT_COLOR_FAILED:-#FF453A}" 15
-    ;;
-  subagent)
-    alert "${WAVE_ALERT_ICON_SUBAGENT:-robot}" "${WAVE_ALERT_COLOR_SUBAGENT:-#429DFF}" 6
     ;;
   end)
     kill_sentinel

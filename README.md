@@ -24,7 +24,6 @@ No restart needed — Claude Code hot-reloads `settings.json`.
 | 🟢 Green | Finished cleanly | | `+fade` | Waiting, passive |
 | 🔴 Red | Failed | | *(static)* | Happened, no rush |
 | 🟣 Purple | External input needed | | | |
-| 🔵 Blue | Informational | | | |
 
 The point is that a working tab should never compete for attention with one that is actually blocked. Only four states move, and all four mean Claude has stopped and is waiting.
 
@@ -38,10 +37,11 @@ The point is that a working tab should never compete for attention with one that
 | `mcp` | `Elicitation` | `message-question+beat` | 🟣 `#BF55EC` | An MCP server wants input |
 | `done` | `Stop` | `circle-check` | 🟢 `#58C142` | Turn finished |
 | `failed` | `StopFailure` | `triangle-exclamation+beat` | 🔴 `#FF453A` | Turn died on an API error |
-| `subagent` | `SubagentStop` | `robot` | 🔵 `#429DFF` | A subagent finished |
 | `end` | `SessionEnd` | — | — | Session over; clears everything |
 
-`Notification` is matched on `idle_prompt|agent_needs_input` so ordinary notifications don't trigger it.
+`Notification` is matched on `idle_prompt|agent_needs_input` so ordinary notifications don't trigger it. This is the only matcher filtering on a value rather than `*`; if Claude Code compares matchers literally rather than as regex it will simply never fire, which is harmless.
+
+**`SubagentStop` is deliberately not used.** A subagent finishing means the main turn is still running, which `busy` already covers. Worse, its badge would outrank the spinner and leave an inactive tab showing "a subagent finished" while it is actually still working.
 
 ## Why Two Objects
 
@@ -52,7 +52,7 @@ Wave allows **one badge per object**, so a naive implementation has every state 
 
 The sentinel is located by process name (`exec -a`), so **no state files are written anywhere**. `Stop`, `StopFailure` and `SessionEnd` all kill it.
 
-Badges sort by priority, highest first. Alerts are 10 (failures 15, subagent 6); the pid-linked spinner defaults to 5. So an alert takes the 12 px icon slot and the spinner demotes to a 4 px dot beside it, then returns when the alert clears.
+Badges sort by priority, highest first. Alerts are 10 (failures 15); the pid-linked spinner defaults to 5. So an alert takes the 12 px icon slot and the spinner demotes to a 4 px dot beside it, then returns when the alert clears.
 
 ## Plays Nicely With Manually Flagged Tabs
 
@@ -84,7 +84,7 @@ export WAVE_ALERT_COLOR_BUSY="#429DFF"      # blue instead of yellow
 export WAVE_ALERT_ICON_BUSY="hourglass+spin"
 ```
 
-Pattern is `WAVE_ALERT_COLOR_<STATE>` and `WAVE_ALERT_ICON_<STATE>`, where `<STATE>` is one of `BUSY`, `INPUT`, `WAITING`, `MCP`, `DONE`, `FAILED`, `SUBAGENT`.
+Pattern is `WAVE_ALERT_COLOR_<STATE>` and `WAVE_ALERT_ICON_<STATE>`, where `<STATE>` is one of `BUSY`, `INPUT`, `WAITING`, `MCP`, `DONE`, `FAILED`.
 
 ### Icons
 

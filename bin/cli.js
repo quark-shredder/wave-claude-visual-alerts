@@ -33,7 +33,6 @@ const EVENTS = [
   { event: 'Elicitation', arg: 'mcp', matcher: '*' },
   { event: 'Stop', arg: 'done' },
   { event: 'StopFailure', arg: 'failed', matcher: '*' },
-  { event: 'SubagentStop', arg: 'subagent', matcher: '*' },
   { event: 'SessionEnd', arg: 'end', matcher: '*' },
 ]
 
@@ -45,7 +44,6 @@ const SCHEME = [
   ['mcp',      'Elicitation',       'message-question+beat', '#BF55EC', 'an MCP server wants input'],
   ['done',     'Stop',              'circle-check',          '#58C142', 'turn finished'],
   ['failed',   'StopFailure',       'triangle-exclamation+beat', '#FF453A', 'turn died on an API error'],
-  ['subagent', 'SubagentStop',      'robot',                 '#429DFF', 'a subagent finished'],
   ['end',      'SessionEnd',        '(clears everything)',   '-',       'session over'],
 ]
 
@@ -86,6 +84,10 @@ function runSetup() {
 
   const backupPath = backupSettings(settingsPath)
   if (backupPath) ok(`Settings backed up: ${backupPath}`)
+
+  // Sweep out every entry we own first, so events dropped from EVENTS in a
+  // later version don't linger as orphaned registrations.
+  settings = removeHookEntries(settings)
 
   for (const { event, arg, matcher } of EVENTS) {
     settings = addHookEntry(settings, event, `${INSTALLED_HOOK} ${arg}`, {
