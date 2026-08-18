@@ -1,78 +1,69 @@
 # wave-claude-visual-alerts — Demo Steps
 
-Execute these steps one at a time. Pause a few seconds between each so the
-viewer can see the tab flag change.
+Pause a few seconds between steps so the viewer can see the tab badge change.
 
 ## Prerequisites
 
-- At least two Wave tabs open, so the flag can be seen on an inactive one.
+- At least two Wave tabs open, so badges can be seen on an inactive one.
 - Permission mode set to **"ask every time"** (shift+tab to cycle).
-- Optional: right-click one tab → **Flag Tab** → pick a colour, to show that
-  manual flags survive alerts.
+- `npx wave-claude-visual-alerts setup` has been run.
 
 ---
 
-## Step 1: Announce the demo
+## Step 1: Announce
 
-Print this message (no tool calls):
-
-> "This is a demo of wave-claude-visual-alerts. It puts a coloured flag on the
-> Wave tab when Claude needs you — orange when Claude wants permission, teal
-> when the task is done. The flag clears itself when you focus the tab."
+> "This turns the Wave tab bar into a status board for Claude Code. Yellow
+> means working, orange means blocked on you, green means done, red means it
+> failed. Only the ones that need you animate."
 
 ---
 
-## Step 2: Show the done flag (teal)
+## Step 2: The whole scheme at once
 
-Print this message (no tool calls):
+Run:
 
-> "First, the done flag. When Claude finishes responding, a teal flag appears
-> on the tab — your turn."
+```bash
+npx wave-claude-visual-alerts test
+```
 
-Then stop. Make no tool calls, so the `Stop` hook fires.
-
-**Switch to another tab** and point at the teal flag on this one.
-
----
-
-## Step 3: Show that focusing clears it
-
-Switch back to the Claude tab. The flag disappears about half a second later —
-no hook involved, Wave clears it on focus.
+Every state cycles for four seconds each. Point out that the four animated
+states are exactly the ones where Claude has stopped and is waiting.
 
 ---
 
-## Step 4: Show the permission flag (orange)
+## Step 3: Busy vs done, live
 
-Print this message:
+Ask Claude to do something slow, then **switch to another tab**. The spinner
+keeps turning on the tab you left. When it finishes, it flips to a green check.
 
-> "Now the permission flag. When Claude needs approval to run a command, the
-> flag turns orange."
+Switch back: the green check clears itself within a second. That is Wave, not
+this tool — nothing here ever clears an alert.
 
-Then immediately run:
+---
+
+## Step 4: The spinner survives focus
+
+While Claude is still working, switch to its tab and stay there. The spinner
+keeps spinning rather than clearing, because it is pinned to a sentinel
+process. Every other badge would have cleared.
+
+---
+
+## Step 5: Alert over spinner
+
+While Claude is working, trigger a permission prompt:
 
 ```bash
 cat /etc/hosts | head -5
 ```
 
-Switch to another tab while the prompt is pending. The orange flag marks the
-tab that is blocked on you. Come back and approve it.
-
----
-
-## Step 5: Show coexistence with a manual flag
-
-If you flagged this tab by hand in the prerequisites, point out that during an
-alert the alert flag takes the main icon slot and your colour shrinks to a
-small dot beside it — then returns to the main slot once the alert clears.
-Nothing overwrites your `tab:flagcolor`.
+The orange hand takes the main icon slot and the yellow spinner demotes to a
+small dot beside it. Approve it, and once the orange clears the spinner
+returns to the main slot.
 
 ---
 
 ## Step 6: Wrap up
 
-Print:
-
-> "One flag. Clears itself. Install with: npx wave-claude-visual-alerts setup"
-
-Then stop.
+> "Two objects, eight states, no state files. Install with:
+> npx wave-claude-visual-alerts setup"

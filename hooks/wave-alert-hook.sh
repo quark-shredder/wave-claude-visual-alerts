@@ -1,26 +1,34 @@
 #!/bin/bash
-# wave-claude-alerts — flag the Wave Terminal tab when Claude wants you.
+# wave-claude-alerts — show Claude Code's state on the Wave Terminal tab.
 #
-#   $1 = input   ->  orange flag  (Claude needs a permission decision)
-#   $1 = done    ->  teal flag    (Claude finished the turn)
+# Called with one argument naming the state. The event name arrives as $1
+# rather than from the stdin JSON, so this script needs no jq and no parsing.
 #
-# The event name comes in as $1 rather than from the stdin JSON, so this
-# script needs no jq and no parsing.
+#   busy      spinner              yellow  working, no action needed
+#   input     hand                 orange  needs a permission decision
+#   waiting   circle-question      orange  idle, waiting on you
+#   mcp       message-question     purple  an MCP server wants input
+#   done      circle-check         green   turn finished
+#   failed    triangle-exclamation red     turn died on an API error
+#   subagent  robot                blue    a subagent finished
+#   end       -                    -       session over: clean up
 #
-# Wave clears the badge by itself once you focus the tab (its BadgeAutoClearing
-# component, Wave >= 0.14.2), so there is deliberately nothing to clear here
-# and no state is kept anywhere.
+# Two objects, deliberately:
 #
-# Colors default to two unused entries from Wave's own flag palette so they
-# don't collide with tabs you've flagged by hand. Override colors with
-# WAVE_ALERT_COLOR_INPUT / WAVE_ALERT_COLOR_DONE and the icon with
-# WAVE_ALERT_ICON_INPUT / WAVE_ALERT_ICON_DONE (any Font Awesome 6 name,
-# optionally suffixed +beat, +fade, +spin).
+#   Alerts go on the TAB. Wave clears them itself when you focus the tab
+#   (its BadgeAutoClearing component), so nothing here ever clears them.
+#
+#   The busy spinner goes on the BLOCK and is pinned to a sentinel process
+#   with --pid, which makes Wave's auto-clear skip it. So it survives focus,
+#   and reappears as the main icon once a higher-priority alert clears.
+#   The sentinel is located by process name, so no state files are kept.
+#
+# Every colour and icon is overridable; see the table in the README.
 #
 # Installed to: ~/.wave-alerts/hooks/wave-alert-hook.sh
 # Run `npx wave-claude-visual-alerts setup` to install/update.
 
-# Not running inside a Wave tab — nothing to flag.
+# Not running inside a Wave tab — nothing to show.
 [ -n "$WAVETERM_TABID" ] || exit 0
 
 WSH="$HOME/Library/Application Support/waveterm/bin/wsh"
@@ -28,11 +36,48 @@ WSH="$HOME/Library/Application Support/waveterm/bin/wsh"
 [ -x "$WSH" ] || WSH=$(command -v wsh 2>/dev/null)
 [ -x "$WSH" ] || exit 0
 
+TAB="tab:$WAVETERM_TABID"
+SENTINEL="wave-alert-busy-$WAVETERM_TABID"
+
+kill_sentinel() { pkill -f "$SENTINEL" 2>/dev/null; }
+
+# alert <icon> <color> [priority]  — on the tab, cleared by Wave on focus
+alert() {
+  "$WSH" badge "$1" --color "$2" --priority "${3:-10}" -b "$TAB" >/dev/null 2>&1
+}
+
 case "$1" in
-  input) color="${WAVE_ALERT_COLOR_INPUT:-#FF9500}"; icon="${WAVE_ALERT_ICON_INPUT:-flag}" ;;
-  done)  color="${WAVE_ALERT_COLOR_DONE:-#00FFDB}";  icon="${WAVE_ALERT_ICON_DONE:-flag}" ;;
-  *)     exit 0 ;;
+  busy)
+    kill_sentinel
+    nohup bash -c "exec -a $SENTINEL sleep 86400" >/dev/null 2>&1 &
+    "$WSH" badge "${WAVE_ALERT_ICON_BUSY:-spinner+spin}" \
+           --color "${WAVE_ALERT_COLOR_BUSY:-#FFE900}" --pid $! >/dev/null 2>&1
+    ;;
+  input)
+    alert "${WAVE_ALERT_ICON_INPUT:-hand+beat}" "${WAVE_ALERT_COLOR_INPUT:-#FF9500}"
+    ;;
+  waiting)
+    alert "${WAVE_ALERT_ICON_WAITING:-circle-question+fade}" "${WAVE_ALERT_COLOR_WAITING:-#FF9500}"
+    ;;
+  mcp)
+    alert "${WAVE_ALERT_ICON_MCP:-message-question+beat}" "${WAVE_ALERT_COLOR_MCP:-#BF55EC}"
+    ;;
+  done)
+    kill_sentinel
+    alert "${WAVE_ALERT_ICON_DONE:-circle-check}" "${WAVE_ALERT_COLOR_DONE:-#58C142}"
+    ;;
+  failed)
+    kill_sentinel
+    alert "${WAVE_ALERT_ICON_FAILED:-triangle-exclamation+beat}" "${WAVE_ALERT_COLOR_FAILED:-#FF453A}" 15
+    ;;
+  subagent)
+    alert "${WAVE_ALERT_ICON_SUBAGENT:-robot}" "${WAVE_ALERT_COLOR_SUBAGENT:-#429DFF}" 6
+    ;;
+  end)
+    kill_sentinel
+    "$WSH" badge --clear >/dev/null 2>&1
+    "$WSH" badge --clear -b "$TAB" >/dev/null 2>&1
+    ;;
 esac
 
-"$WSH" badge "$icon" --color "$color" -b "tab:$WAVETERM_TABID" >/dev/null 2>&1
 exit 0

@@ -1,6 +1,6 @@
 # wave-claude-visual-alerts
 
-Flags the [Wave Terminal](https://waveterm.dev) tab when [Claude Code](https://claude.ai/claude-code) needs your input or finishes a task. The flag clears itself the moment you focus the tab.
+Turns the [Wave Terminal](https://waveterm.dev) tab bar into a live status board for [Claude Code](https://claude.ai/claude-code). At a glance you can see which tabs are working, which are finished, and which are blocked waiting on you.
 
 Built for the case where you have eight or more Wave tabs open and need to know *which one* wants you.
 
@@ -8,32 +8,55 @@ Built for the case where you have eight or more Wave tabs open and need to know 
 
 ```bash
 npx wave-claude-visual-alerts setup
+npx wave-claude-visual-alerts test   # cycle every state so you can see them
 ```
 
-Then restart Claude Code.
+No restart needed — Claude Code hot-reloads `settings.json`.
 
-## What It Does
+## The Scheme
 
-Two events, one flag icon in the tab bar:
+**Colour carries urgency. Animation carries kind.**
 
-| Alert | Color | Fires on | Meaning |
-|-------|-------|----------|---------|
-| 🟠 Orange flag | `#FF9500` | `PermissionRequest` | Claude needs a permission decision |
-| 🟦 Teal flag | `#00FFDB` | `Stop` | Claude finished the turn |
+| Colour | Meaning | | Animation | Meaning |
+|---|---|---|---|---|
+| 🟡 Yellow | Working, no action needed | | `+spin` | An ongoing process |
+| 🟠 Orange | Blocked on you | | `+beat` | Needs you now |
+| 🟢 Green | Finished cleanly | | `+fade` | Waiting, passive |
+| 🔴 Red | Failed | | *(static)* | Happened, no rush |
+| 🟣 Purple | External input needed | | | |
+| 🔵 Blue | Informational | | | |
 
-**Clearing is not our job.** Wave ≥ 0.14.2 ships a `BadgeAutoClearing` component that removes a tab badge about 500 ms after you focus that tab (3 s if you were already sitting on it). So there are no clear-hooks, no state directory, and no way for a stale flag to get stuck.
+The point is that a working tab should never compete for attention with one that is actually blocked. Only four states move, and all four mean Claude has stopped and is waiting.
+
+## States
+
+| State | Claude Code event | Icon | Colour | Meaning |
+|---|---|---|---|---|
+| `busy` | `UserPromptSubmit` | `spinner+spin` | 🟡 `#FFE900` | Claude is working |
+| `input` | `PermissionRequest` | `hand+beat` | 🟠 `#FF9500` | Needs a permission decision |
+| `waiting` | `Notification` | `circle-question+fade` | 🟠 `#FF9500` | Idle, waiting on you |
+| `mcp` | `Elicitation` | `message-question+beat` | 🟣 `#BF55EC` | An MCP server wants input |
+| `done` | `Stop` | `circle-check` | 🟢 `#58C142` | Turn finished |
+| `failed` | `StopFailure` | `triangle-exclamation+beat` | 🔴 `#FF453A` | Turn died on an API error |
+| `subagent` | `SubagentStop` | `robot` | 🔵 `#429DFF` | A subagent finished |
+| `end` | `SessionEnd` | — | — | Session over; clears everything |
+
+`Notification` is matched on `idle_prompt|agent_needs_input` so ordinary notifications don't trigger it.
+
+## Why Two Objects
+
+Wave allows **one badge per object**, so a naive implementation has every state overwrite the last. This uses two objects deliberately:
+
+- **Alerts go on the tab.** Wave ≥ 0.14.2 ships a `BadgeAutoClearing` component that removes a tab badge ~500 ms after you focus that tab (3 s if you were already there). So there are no clear-hooks, no state directory, and no way for a stale alert to stick.
+- **The busy spinner goes on the block**, pinned to a sentinel process via `wsh badge --pid`. Pid-linked badges are explicitly skipped by auto-clear, so the spinner survives you looking at the tab — and reappears as the main icon once a higher-priority alert clears.
+
+The sentinel is located by process name (`exec -a`), so **no state files are written anywhere**. `Stop`, `StopFailure` and `SessionEnd` all kill it.
+
+Badges sort by priority, highest first. Alerts are 10 (failures 15, subagent 6); the pid-linked spinner defaults to 5. So an alert takes the 12 px icon slot and the spinner demotes to a 4 px dot beside it, then returns when the alert clears.
 
 ## Plays Nicely With Manually Flagged Tabs
 
-If you use Wave's **Flag Tab** right-click menu to colour-code your tabs, this tool will not disturb it. It never writes `tab:flagcolor`.
-
-Wave renders your manual flag as a synthetic badge at `priority: 0` and merges it with real badges, sorted highest-priority-first. Alert badges default to `priority: 10`, so:
-
-- **Normally** — your manual flag owns the 12 px icon slot.
-- **During an alert** — the alert flag takes the main slot; your colour demotes to a 4 px dot beside it.
-- **After it clears** — your manual flag returns to the main slot, untouched.
-
-Override and restore, with nothing saved or written back.
+If you use Wave's **Flag Tab** right-click menu to colour-code tabs, this never disturbs it — it does not write `tab:flagcolor`. Wave merges your manual flag as a synthetic `priority: 0` badge, so alerts outrank it, and it returns to the main slot once they clear.
 
 ## Commands
 
@@ -41,37 +64,31 @@ Override and restore, with nothing saved or written back.
 npx wave-claude-visual-alerts setup      # Install hook + register in settings.json
 npx wave-claude-visual-alerts uninstall  # Deregister + remove hook
 npx wave-claude-visual-alerts doctor     # Check wsh, hook script, registration
-npx wave-claude-visual-alerts test       # Show the flag on this tab for 20s
+npx wave-claude-visual-alerts test       # Cycle every state, 4s each
 ```
-
-`test` pins the badge to a short-lived pid so auto-clear skips it — otherwise you could never see an alert on the tab you are looking at.
 
 ## Requirements
 
 - [Wave Terminal](https://waveterm.dev) **v0.14.2+** (needs badge auto-clearing)
-- [Claude Code](https://claude.ai/claude-code) v2.x (needs the `PermissionRequest` event)
+- [Claude Code](https://claude.ai/claude-code) v2.x
 - Node.js 18+
 
-No `jq`. No config file.
+No `jq`. No config file. No state directory.
 
 ## Customization
 
-Four environment variables, read at hook time. No config file, no restart.
+Every icon and colour is overridable by environment variable, read at hook time:
 
 ```bash
-export WAVE_ALERT_COLOR_INPUT="#FF453A"   # permission needed
-export WAVE_ALERT_COLOR_DONE="#58C142"    # task done
-export WAVE_ALERT_ICON_INPUT="bell+beat"  # permission needed
-export WAVE_ALERT_ICON_DONE="circle-check"
+export WAVE_ALERT_COLOR_BUSY="#429DFF"      # blue instead of yellow
+export WAVE_ALERT_ICON_BUSY="hourglass+spin"
 ```
 
-### Colors
-
-Defaults are orange and teal — two entries from Wave's own flag palette that are easy to tell apart from the green/blue/purple most people use for manual tab flags. Any hex (`#RRGGBB`, `#RRGGBBAA`) or CSS colour name works.
+Pattern is `WAVE_ALERT_COLOR_<STATE>` and `WAVE_ALERT_ICON_<STATE>`, where `<STATE>` is one of `BUSY`, `INPUT`, `WAITING`, `MCP`, `DONE`, `FAILED`, `SUBAGENT`.
 
 ### Icons
 
-The flag is just the default. Wave bundles **Font Awesome Pro 6.7.2** and accepts any of its **4,205 icon names** — browse them at [fontawesome.com/icons](https://fontawesome.com/icons), or list the exact set your install ships (macOS paths):
+Wave bundles **Font Awesome Pro 6.7.2**, so any of its **4,205 icon names** works. Browse them at [fontawesome.com/icons](https://fontawesome.com/icons), or list the exact set your install ships:
 
 ```bash
 cd "$(mktemp -d)" &&
@@ -82,7 +99,7 @@ grep -oE '\.fa-[a-z0-9-]+\{' fontawesome.min.css |
   sed -E 's/^\.fa-//; s/\{$//' | sort -u
 ```
 
-Useful ones for alerts, all verified present:
+Useful ones for alerts:
 
 | | |
 |---|---|
@@ -92,7 +109,7 @@ Useful ones for alerts, all verified present:
 | **In progress** | `spinner` `hourglass` `hourglass-half` `clock` |
 | **Misc** | `robot` `comment` `comment-dots` `envelope` `circle-dot` `circle-small` |
 
-**Style prefixes.** Bare names resolve to solid. Prefix for other families:
+**Style prefixes.** Bare names resolve to solid; prefix for other families:
 
 | Syntax | Renders as |
 |---|---|
@@ -100,41 +117,32 @@ Useful ones for alerts, all verified present:
 | `regular@bell` | Sharp Regular — lighter outline |
 | `brands@github` | Brand logos |
 
-**Animation suffixes.** Append `+beat`, `+fade`, or `+spin` to make the badge move — good for a permission prompt that is blocking you:
-
-```bash
-export WAVE_ALERT_ICON_INPUT="bell+beat"
-export WAVE_ALERT_ICON_DONE="circle-check"
-```
+**Animation suffixes.** Append `+beat` (pulses size), `+fade` (pulses opacity), or `+spin` (rotates). All three verified working as tab badges.
 
 > **Gotcha:** an unrecognised icon name is accepted silently and renders as an
-> **empty badge** — nothing validates it. If your flag vanishes after changing
-> the icon, check the spelling against the list above.
+> **empty badge** — nothing validates it. If a badge vanishes after you change
+> the icon, check the spelling.
+
+### Colours
+
+Any hex (`#RRGGBB`, `#RRGGBBAA`) or CSS colour name. The defaults come from Wave's own flag palette: green `#58C142`, teal `#00FFDB`, blue `#429DFF`, purple `#BF55EC`, red `#FF453A`, orange `#FF9500`, yellow `#FFE900`.
 
 ## How It Works
 
-`setup` writes `~/.wave-alerts/hooks/wave-alert-hook.sh` and registers it in `~/.claude/settings.json` for two events. The event name is passed as an **argument** rather than parsed from the stdin JSON, which is why the hook needs no `jq`:
+`setup` writes `~/.wave-alerts/hooks/wave-alert-hook.sh` and registers it in `~/.claude/settings.json` for eight events. The state arrives as an **argument**, not parsed from the stdin JSON, which is why the hook needs no `jq`:
 
 ```json
-{
-  "PermissionRequest": [{ "matcher": "*", "hooks": [{ "type": "command",
-      "command": "~/.wave-alerts/hooks/wave-alert-hook.sh input", "timeout": 3 }] }],
-  "Stop": [{ "hooks": [{ "type": "command",
-      "command": "~/.wave-alerts/hooks/wave-alert-hook.sh done", "timeout": 3 }] }]
-}
+{ "Stop": [{ "hooks": [{ "type": "command",
+    "command": "~/.wave-alerts/hooks/wave-alert-hook.sh done", "timeout": 3 }] }] }
 ```
 
-The hook is ~20 lines of logic. It reads `WAVETERM_TABID` from the environment, exits silently if unset (so it is harmless outside Wave), and runs:
+The hook reads `WAVETERM_TABID` from the environment and exits silently if unset, so it is harmless outside Wave.
 
-```bash
-wsh badge "$icon" --color "$color" -b "tab:$WAVETERM_TABID"
-```
+### Known limitations
 
-The badge is set on the **tab** rather than the block, so focusing the tab clears it no matter which pane inside is focused.
-
-### Known limitation
-
-One badge exists per tab, so two Claude sessions in the *same* tab share one flag and the most recent event wins. One session per tab — the usual layout — is unaffected.
+- **One badge per tab**, so two Claude sessions sharing a tab share the alert slot and the most recent event wins. Their busy spinners are per-block and don't collide. One session per tab — the usual layout — is unaffected.
+- **No duration threshold.** Claude Code has no "running longer than N minutes" event. `busy` covers the whole turn, however long.
+- **No workflow or `/loop` events.** Workflows surface as `SubagentStart`/`SubagentStop` per agent; `/loop` iterations are ordinary turns.
 
 ## Coexistence
 
@@ -144,9 +152,9 @@ One badge exists per tab, so two Claude sessions in the *same* tab share one fla
 
 Run `npx wave-claude-visual-alerts doctor`.
 
-**No flag appears?** Confirm `echo $WAVETERM_TABID` is non-empty in the Claude Code pane. Hooks inherit the shell environment, so a Claude Code started outside Wave will not have it.
+**Nothing appears?** Confirm `echo $WAVETERM_TABID` is non-empty in the Claude Code pane. Hooks inherit the shell environment.
 
-**Flag vanishes too quickly?** Expected on the tab you are already viewing — Wave clears it after 3 s. On inactive tabs it persists until you switch there.
+**Spinner stuck after a crash?** `pkill -f wave-alert-busy` clears any orphaned sentinel.
 
 ## License
 

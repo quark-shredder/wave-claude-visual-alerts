@@ -25,14 +25,32 @@ const SOURCE_HOOK = join(ROOT, 'hooks', 'wave-alert-hook.sh')
 const HOOK_TIMEOUT = 3
 
 // Claude Code event -> argument passed to the hook script.
-// PermissionRequest is tool-scoped so it needs a matcher; Stop is not.
+// Only events that support a matcher get one; Stop and UserPromptSubmit do not.
 const EVENTS = [
+  { event: 'UserPromptSubmit', arg: 'busy' },
   { event: 'PermissionRequest', arg: 'input', matcher: '*' },
+  { event: 'Notification', arg: 'waiting', matcher: 'idle_prompt|agent_needs_input' },
+  { event: 'Elicitation', arg: 'mcp', matcher: '*' },
   { event: 'Stop', arg: 'done' },
+  { event: 'StopFailure', arg: 'failed', matcher: '*' },
+  { event: 'SubagentStop', arg: 'subagent', matcher: '*' },
+  { event: 'SessionEnd', arg: 'end', matcher: '*' },
 ]
 
-const COLOR_INPUT = '#FF9500' // orange — Claude needs a permission decision
-const COLOR_DONE = '#00FFDB'  // teal   — Claude finished the turn
+// Colour carries urgency, animation carries kind. See README.
+const SCHEME = [
+  ['busy',     'UserPromptSubmit',  'spinner+spin',          '#FFE900', 'working, no action'],
+  ['input',    'PermissionRequest', 'hand+beat',             '#FF9500', 'needs a permission decision'],
+  ['waiting',  'Notification',      'circle-question+fade',  '#FF9500', 'idle, waiting on you'],
+  ['mcp',      'Elicitation',       'message-question+beat', '#BF55EC', 'an MCP server wants input'],
+  ['done',     'Stop',              'circle-check',          '#58C142', 'turn finished'],
+  ['failed',   'StopFailure',       'triangle-exclamation+beat', '#FF453A', 'turn died on an API error'],
+  ['subagent', 'SubagentStop',      'robot',                 '#429DFF', 'a subagent finished'],
+  ['end',      'SessionEnd',        '(clears everything)',   '-',       'session over'],
+]
+
+const COLOR_INPUT = '#FF9500'
+const COLOR_DONE = '#58C142'
 
 const log = (m) => console.log(m)
 const ok = (m) => log(`  ✓ ${m}`)
@@ -78,11 +96,13 @@ function runSetup() {
   saveSettings(settingsPath, settings)
   ok(`Settings updated: ${settingsPath}`)
 
-  log('\n  Registered 2 hook events:')
-  log(`    • PermissionRequest  → orange flag ${COLOR_INPUT}  (Claude needs you)`)
-  log(`    • Stop               → teal flag   ${COLOR_DONE}  (task done)`)
-  log('\n  The flag clears itself when you focus the tab — Wave handles that.')
-  log('  Override colors with WAVE_ALERT_COLOR_INPUT / WAVE_ALERT_COLOR_DONE.')
+  log(`\n  Registered ${EVENTS.length} hook events:`)
+  for (const [arg, event, icon, color, meaning] of SCHEME) {
+    log(`    • ${event.padEnd(18)} ${icon.padEnd(23)} ${color.padEnd(8)} ${meaning}`)
+  }
+  log('\n  Alerts sit on the tab and clear when you focus it — Wave does that.')
+  log('  The busy spinner sits on the block and survives focus until the turn ends.')
+  log('  Override any icon or colour with WAVE_ALERT_ICON_* / WAVE_ALERT_COLOR_*.')
   log('\n  Try it:  npx wave-claude-visual-alerts test')
   log('\n  ✅ Setup complete! Restart Claude Code for hooks to take effect.\n')
 }
@@ -166,27 +186,22 @@ function runDoctor() {
 function runTest() {
   log('\n🌊 wave-claude-visual-alerts test\n')
   const tabId = process.env.WAVETERM_TABID
-  if (!tabId) {
-    fail('Not running inside a Wave tab (WAVETERM_TABID unset).')
-    log('')
-    return
-  }
   const wsh = findWsh()
-  if (!wsh) {
-    fail('wsh not found.')
-    log('')
-    return
+  if (!tabId) { fail('Not running inside a Wave tab (WAVETERM_TABID unset).'); log(''); return }
+  if (!wsh)   { fail('wsh not found.'); log(''); return }
+
+  const hook = existsSync(INSTALLED_HOOK) ? INSTALLED_HOOK : SOURCE_HOOK
+  const states = SCHEME.filter(([arg]) => arg !== 'end')
+  log('  Cycling every state, 4s each. Watch the tab bar.\n')
+  for (const [arg, event, icon, color, meaning] of states) {
+    log(`    ${arg.padEnd(9)} ${icon.padEnd(23)} ${color.padEnd(8)} ${meaning}`)
   }
-  // Real alerts auto-clear on focus, which you cannot see on the tab you are
-  // looking at. Pid-link the badge to a short sleep so it stays put.
-  const holder = execFileSync('/bin/sh', ['-c', 'sleep 20 >/dev/null 2>&1 & echo $!'], {
-    encoding: 'utf-8',
-  }).trim()
-  execFileSync(wsh, ['badge', 'flag', '--color', COLOR_INPUT, '--pid', holder,
-                     '-b', `tab:${tabId}`])
-  ok(`Orange flag on this tab for 20s (${COLOR_INPUT}).`)
-  log('  If you had flagged this tab by hand, your color is now the small dot')
-  log('  beside it, and returns to the main slot when the alert expires.\n')
+  log('')
+  // Alerts auto-clear on focus, so hold each one with a pid link while it shows.
+  const script = states.map(([arg]) =>
+    `"${hook}" ${arg}; sleep 4`).join('; ')
+  execFileSync('/bin/sh', ['-c', `${script}; "${hook}" end`], { stdio: 'ignore' })
+  ok('Cycle complete — everything cleared.\n')
 }
 
 function printHelp() {
@@ -202,11 +217,10 @@ Commands:
   test        Show the alert flag on the current tab for 20s
 
 Alerts:
-  orange flag ${COLOR_INPUT}   Claude needs a permission decision
-  teal flag   ${COLOR_DONE}   Claude finished the turn
+${SCHEME.map(([a,e,i,c,m]) => `  ${a.padEnd(9)} ${i.padEnd(23)} ${c.padEnd(8)} ${m}`).join('\n')}
 
-The flag clears itself when you focus the tab. Colors can be overridden with
-WAVE_ALERT_COLOR_INPUT / WAVE_ALERT_COLOR_DONE.
+Alerts clear when you focus the tab. The busy spinner persists until the turn
+ends. Override any icon or colour with WAVE_ALERT_ICON_* / WAVE_ALERT_COLOR_*.
 `)
 }
 

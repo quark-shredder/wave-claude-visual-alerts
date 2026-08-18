@@ -1,7 +1,7 @@
 {
   "name": "wave-claude-visual-alerts",
-  "version": "0.2.0",
-  "description": "Flags the Wave Terminal tab when Claude Code needs your input or finishes a task — clears itself when you focus the tab",
+  "version": "0.3.0",
+  "description": "Turns the Wave Terminal tab bar into a live status board for Claude Code — working, blocked, done, or failed, at a glance",
   "type": "module",
   "bin": {
     "wave-claude-visual-alerts": "./bin/cli.js"
