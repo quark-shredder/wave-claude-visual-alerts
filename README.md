@@ -45,7 +45,7 @@ A working tab should never compete for attention with a blocked one. Only the st
 
 | State | Claude Code event | Icon | Colour | Meaning |
 |---|---|---|---|---|
-| `busy` | `UserPromptSubmit` | `spinner+spin` | 🔵 `#429DFF` | Claude is working |
+| `busy` | `UserPromptSubmit`, `PreToolUse` | `spinner+spin` | 🔵 `#429DFF` | Claude is working |
 | `input` | `PermissionRequest` | `hand+beat` | 🟠 `#FF9500` | Needs a permission decision |
 | `waiting` | `Notification` | `circle-question+fade` | 🟡 `#FFE900` | Idle, waiting on you |
 | `mcp` | `Elicitation` | `message-question+beat` | 🟣 `#BF55EC` | An MCP server wants input |
@@ -64,7 +64,7 @@ Wave allows **one badge per object**, so a naive implementation has every state 
 - **Alerts go on the tab.** Wave ≥ 0.14.2 ships a `BadgeAutoClearing` component that removes a tab badge ~500 ms after you focus that tab (3 s if you were already there). So there are no clear-hooks, no state directory, and no way for a stale alert to stick.
 - **The busy spinner goes on the block**, pinned to a sentinel process via `wsh badge --pid`. Pid-linked badges are explicitly skipped by auto-clear, so the spinner survives you looking at the tab — and reappears as the main icon once a higher-priority alert clears.
 
-The sentinel is located by process name (`exec -a`), so **no state files are written anywhere**. `Stop`, `StopFailure` and `SessionEnd` all kill it.
+`busy` fires on **both** `UserPromptSubmit` and `PreToolUse`. The second is necessary because a turn started with a `!` bash command never fires `UserPromptSubmit`, and would otherwise run with no spinner at all. Since `PreToolUse` fires on every tool call, the already-spinning path must be cheap: the sentinel's pid is kept in `~/.wave-alerts/run/<tabid>.pid`, so the check is a file read plus `kill -0` — **3 ms**, against 17 ms for `pgrep` alone. A stale or garbage pid file is ignored and respawned. `Stop`, `StopFailure` and `SessionEnd` kill the sentinel and remove the file, verifying the process is really ours first, since pids get recycled.
 
 Badges sort by priority, highest first. Alerts are 10 (failures 15); the pid-linked spinner defaults to 5. So an alert takes the 12 px icon slot and the spinner demotes to a 4 px dot beside it, then returns when the alert clears.
 
@@ -156,7 +156,7 @@ The hook reads `WAVETERM_TABID` from the environment and exits silently if unset
 
 - **One badge per tab**, so two Claude sessions sharing a tab share the alert slot and the most recent event wins. Their busy spinners are per-block and don't collide. One session per tab — the usual layout — is unaffected.
 - **No duration threshold.** Claude Code has no "running longer than N minutes" event. `busy` covers the whole turn, however long.
-- **The spinner is set once per turn, on `UserPromptSubmit`, and is not re-asserted.** If something clears it mid-turn — an external `pkill -f wave-alert-busy`, a Wave restart — the tab looks idle until the next prompt. Re-arming on `PostToolUse` would heal it, but costs ~29 ms on every tool call, which is not worth paying for a case that only arises when something else kills the sentinel.
+- **If something external clears the spinner mid-turn** — an over-broad `pkill -f wave-alert-busy` matches every tab, not just one — it returns on the next tool call rather than instantly.
 - **No workflow or `/loop` events.** Workflows surface as `SubagentStart`/`SubagentStop` per agent; `/loop` iterations are ordinary turns.
 
 ## Coexistence

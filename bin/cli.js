@@ -29,6 +29,9 @@ const HOOK_TIMEOUT = 3
 // Only events that support a matcher get one; Stop and UserPromptSubmit do not.
 const EVENTS = [
   { event: 'UserPromptSubmit', arg: 'busy' },
+  // A turn started with a `!` bash command never fires UserPromptSubmit, so
+  // PreToolUse arms the spinner too. It exits in ~5ms when already spinning.
+  { event: 'PreToolUse', arg: 'busy', matcher: '*' },
   { event: 'PermissionRequest', arg: 'input', matcher: '*' },
   { event: 'Notification', arg: 'waiting', matcher: 'idle_prompt|agent_needs_input' },
   { event: 'Elicitation', arg: 'mcp', matcher: '*' },
@@ -39,7 +42,7 @@ const EVENTS = [
 
 // Colour carries urgency, animation carries kind. See README.
 const SCHEME = [
-  ['busy',     'UserPromptSubmit',  'spinner+spin',          '#429DFF', 'working, no action'],
+  ['busy',     'UserPromptSubmit/PreToolUse', 'spinner+spin',   '#429DFF', 'working, no action'],
   ['input',    'PermissionRequest', 'hand+beat',             '#FF9500', 'needs a permission decision'],
   ['waiting',  'Notification',      'circle-question+fade',  '#FFE900', 'idle, waiting on you'],
   ['mcp',      'Elicitation',       'message-question+beat', '#BF55EC', 'an MCP server wants input'],

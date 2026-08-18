@@ -20,7 +20,13 @@
 #   The busy spinner goes on the BLOCK and is pinned to a sentinel process
 #   with --pid, which makes Wave's auto-clear skip it. So it survives focus,
 #   and reappears as the main icon once a higher-priority alert clears.
-#   The sentinel is located by process name, so no state files are kept.
+#
+#   The sentinel's pid is recorded in ~/.wave-alerts/run/<tabid>.pid. `busy`
+#   fires on both UserPromptSubmit and PreToolUse, because a turn started with
+#   a `!` bash command never fires UserPromptSubmit and would otherwise run
+#   with no spinner at all. PreToolUse fires on every tool call, so the common
+#   path must be cheap: a pid file read plus `kill -0` is ~5ms, where `pgrep`
+#   alone was 17ms.
 #
 # Every colour and icon is overridable; see the table in the README.
 #
@@ -46,8 +52,26 @@ WSH="$HOME/Library/Application Support/waveterm/bin/wsh"
 
 TAB="tab:$WAVETERM_TABID"
 SENTINEL="wave-alert-busy-$WAVETERM_TABID"
+RUNDIR="$HOME/.wave-alerts/run"
+PIDFILE="$RUNDIR/$WAVETERM_TABID.pid"
 
-kill_sentinel() { pkill -f -- "$SENTINEL" 2>/dev/null; }
+# Echo the sentinel's pid if it is alive, else fail. This is the hot path.
+sentinel_pid() {
+  [ -r "$PIDFILE" ] || return 1
+  read -r p < "$PIDFILE" 2>/dev/null || return 1
+  case "$p" in ''|*[!0-9]*) return 1 ;; esac
+  kill -0 "$p" 2>/dev/null || return 1
+  echo "$p"
+}
+
+kill_sentinel() {
+  p=$(sentinel_pid) || { rm -f "$PIDFILE" 2>/dev/null; return 0; }
+  # Pids get recycled, so confirm it is really ours before signalling.
+  case "$(ps -o args= -p "$p" 2>/dev/null)" in
+    "$SENTINEL"*) kill "$p" 2>/dev/null ;;
+  esac
+  rm -f "$PIDFILE" 2>/dev/null
+}
 
 # alert <icon> <color> [priority]  — on the tab, cleared by Wave on focus
 alert() {
@@ -56,16 +80,15 @@ alert() {
 
 case "$1" in
   busy)
-    # Reuse a live sentinel rather than kill-and-respawn. Wave clears badges by
-    # oref, not by badge id, and does so asynchronously when a watched pid dies
-    # — so killing the old sentinel here would race the new badge and wipe it,
-    # leaving a running sentinel with nothing displayed.
-    pid=$(pgrep -f -- "$SENTINEL" 2>/dev/null | head -1)
-    if [ -z "$pid" ]; then
-      # $SENTINEL is passed as an argument, never interpolated into the code
-      nohup bash -c 'exec -a "$1" sleep 86400' _ "$SENTINEL" >/dev/null 2>&1 &
-      pid=$!
-    fi
+    # Already spinning: leave it alone. Never kill-and-respawn here — Wave
+    # clears badges by oref rather than badge id, and does it asynchronously
+    # when a watched pid dies, so a kill would race the new badge and wipe it.
+    sentinel_pid >/dev/null && exit 0
+    mkdir -p "$RUNDIR" 2>/dev/null
+    # $SENTINEL is passed as an argument, never interpolated into the code
+    nohup bash -c 'exec -a "$1" sleep 86400' _ "$SENTINEL" >/dev/null 2>&1 &
+    pid=$!
+    echo "$pid" > "$PIDFILE" 2>/dev/null
     "$WSH" badge "${WAVE_ALERT_ICON_BUSY:-spinner+spin}" \
            --color "${WAVE_ALERT_COLOR_BUSY:-#429DFF}" --pid "$pid" >/dev/null 2>&1
     ;;
