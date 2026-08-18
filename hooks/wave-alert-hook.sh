@@ -4,7 +4,6 @@
 # Called with one argument naming the state. The event name arrives as $1
 # rather than from the stdin JSON, so this script needs no jq and no parsing.
 #
-#   turnstart -                    -       new prompt: clear a stale spinner
 #   busy      spinner              blue    working, no action needed
 #   input     hand                 orange  needs a permission decision
 #   waiting   circle-question      yellow  idle, waiting on you
@@ -23,18 +22,11 @@
 #   and reappears as the main icon once a higher-priority alert clears.
 #
 #   The sentinel's pid is recorded in ~/.wave-alerts/run/<tabid>.pid. `busy`
-#   fires on PreToolUse, which covers turns started with a `!` bash command
-#   that never fire UserPromptSubmit. Since PreToolUse runs on every tool call
-#   the common path must be cheap: a pid file read plus `kill -0` is ~3ms,
-#   where `pgrep` alone was 17ms.
-#
-#   Claude Code fires NO hook event when you interrupt a turn with Esc —
-#   verified by logging every invocation across two interrupts. So the sentinel
-#   outlives the turn and the tab keeps claiming to work. `turnstart`, on
-#   UserPromptSubmit, kills it: a new prompt proves the previous turn ended.
-#   It deliberately does not set a badge — leaving the respawn to the first
-#   PreToolUse puts time between the kill and the new badge, so Wave's
-#   asynchronous clear-by-oref cannot race it.
+#   fires on both UserPromptSubmit and PreToolUse, because a turn started with
+#   a `!` bash command never fires UserPromptSubmit and would otherwise run
+#   with no spinner at all. PreToolUse fires on every tool call, so the common
+#   path must be cheap: a pid file read plus `kill -0` is ~5ms, where `pgrep`
+#   alone was 17ms.
 #
 # Every colour and icon is overridable; see the table in the README.
 #
@@ -87,9 +79,6 @@ alert() {
 }
 
 case "$1" in
-  turnstart)
-    kill_sentinel
-    ;;
   busy)
     # Already spinning: leave it alone. Never kill-and-respawn here — Wave
     # clears badges by oref rather than badge id, and does it asynchronously

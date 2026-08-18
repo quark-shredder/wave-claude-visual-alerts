@@ -1,6 +1,6 @@
 {
   "name": "wave-claude-visual-alerts",
-  "version": "1.0.2",
+  "version": "1.0.1",
   "description": "Turns the Wave Terminal tab bar into a live status board for Claude Code — working, blocked, done, or failed, at a glance",
   "type": "module",
   "bin": {
