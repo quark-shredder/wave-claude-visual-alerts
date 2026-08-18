@@ -156,6 +156,7 @@ The hook reads `WAVETERM_TABID` from the environment and exits silently if unset
 
 - **One badge per tab**, so two Claude sessions sharing a tab share the alert slot and the most recent event wins. Their busy spinners are per-block and don't collide. One session per tab — the usual layout — is unaffected.
 - **No duration threshold.** Claude Code has no "running longer than N minutes" event. `busy` covers the whole turn, however long.
+- **The spinner is set once per turn, on `UserPromptSubmit`, and is not re-asserted.** If something clears it mid-turn — an external `pkill -f wave-alert-busy`, a Wave restart — the tab looks idle until the next prompt. Re-arming on `PostToolUse` would heal it, but costs ~29 ms on every tool call, which is not worth paying for a case that only arises when something else kills the sentinel.
 - **No workflow or `/loop` events.** Workflows surface as `SubagentStart`/`SubagentStop` per agent; `/loop` iterations are ordinary turns.
 
 ## Coexistence
