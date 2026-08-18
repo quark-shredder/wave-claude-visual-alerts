@@ -1,6 +1,6 @@
 {
   "name": "wave-claude-visual-alerts",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Turns the Wave Terminal tab bar into a live status board for Claude Code — working, blocked, done, or failed, at a glance",
   "type": "module",
   "bin": {
@@ -9,15 +9,21 @@
   "files": [
     "bin/",
     "hooks/",
-    "lib/"
+    "lib/",
+    "README.md",
+    "DEMO.md"
   ],
   "keywords": [
     "claude",
     "claude-code",
     "wave-terminal",
     "waveterm",
+    "wsh",
     "hooks",
     "alerts",
+    "notifications",
+    "badge",
+    "tab",
     "developer-tools"
   ],
   "license": "MIT",
@@ -27,5 +33,10 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/quark-shredder/wave-claude-visual-alerts.git"
-  }
+  },
+  "homepage": "https://github.com/quark-shredder/wave-claude-visual-alerts#readme",
+  "bugs": {
+    "url": "https://github.com/quark-shredder/wave-claude-visual-alerts/issues"
+  },
+  "author": "quark-shredder"
 }

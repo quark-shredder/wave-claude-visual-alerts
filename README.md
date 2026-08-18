@@ -17,23 +17,37 @@ No restart needed — Claude Code hot-reloads `settings.json`.
 
 **Colour carries urgency. Animation carries kind.**
 
-| Colour | Meaning | | Animation | Meaning |
-|---|---|---|---|---|
-| 🟡 Yellow | Working, no action needed | | `+spin` | An ongoing process |
-| 🟠 Orange | Blocked on you | | `+beat` | Needs you now |
-| 🟢 Green | Finished cleanly | | `+fade` | Waiting, passive |
-| 🔴 Red | Failed | | *(static)* | Happened, no rush |
-| 🟣 Purple | External input needed | | | |
+**Cool colours need nothing from you. Warm colours escalate.**
 
-The point is that a working tab should never compete for attention with one that is actually blocked. Only four states move, and all four mean Claude has stopped and is waiting.
+| | Colour | State | Needs you? |
+|---|---|---|---|
+| 🔵 | Blue `#429DFF` | working | no |
+| 🟢 | Green `#58C142` | finished | no |
+| 🟡 | Yellow `#FFE900` | idle, waiting on you | soon |
+| 🟠 | Orange `#FF9500` | blocked on you | now |
+| 🔴 | Red `#FF453A` | failed | now |
+| 🟣 | Purple `#BF55EC` | MCP wants input | now (external) |
+
+Temperature encodes urgency, so you can rank three states without remembering what any colour "means": yellow → orange → red is *waiting* → *blocked* → *broken*. Purple sits outside the ladder because an MCP elicitation is a different category — an external system, not Claude.
+
+Animation carries kind rather than urgency:
+
+| Animation | Meaning |
+|---|---|
+| `+spin` | An ongoing process |
+| `+beat` | Needs you now |
+| `+fade` | Waiting, passive |
+| *(static)* | Happened, no rush |
+
+A working tab should never compete for attention with a blocked one. Only the states where Claude has stopped and is waiting animate.
 
 ## States
 
 | State | Claude Code event | Icon | Colour | Meaning |
 |---|---|---|---|---|
-| `busy` | `UserPromptSubmit` | `spinner+spin` | 🟡 `#FFE900` | Claude is working |
+| `busy` | `UserPromptSubmit` | `spinner+spin` | 🔵 `#429DFF` | Claude is working |
 | `input` | `PermissionRequest` | `hand+beat` | 🟠 `#FF9500` | Needs a permission decision |
-| `waiting` | `Notification` | `circle-question+fade` | 🟠 `#FF9500` | Idle, waiting on you |
+| `waiting` | `Notification` | `circle-question+fade` | 🟡 `#FFE900` | Idle, waiting on you |
 | `mcp` | `Elicitation` | `message-question+beat` | 🟣 `#BF55EC` | An MCP server wants input |
 | `done` | `Stop` | `circle-check` | 🟢 `#58C142` | Turn finished |
 | `failed` | `StopFailure` | `triangle-exclamation+beat` | 🔴 `#FF453A` | Turn died on an API error |
@@ -80,7 +94,7 @@ No `jq`. No config file. No state directory.
 Every icon and colour is overridable by environment variable, read at hook time:
 
 ```bash
-export WAVE_ALERT_COLOR_BUSY="#429DFF"      # blue instead of yellow
+export WAVE_ALERT_COLOR_BUSY="#8E8E93"      # grey instead of blue
 export WAVE_ALERT_ICON_BUSY="hourglass+spin"
 ```
 

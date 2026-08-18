@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync, copyFileSync, chmodSync, rmSync, readdirSync } from 'fs'
+import { existsSync, mkdirSync, copyFileSync, chmodSync, rmSync, readdirSync, readFileSync } from 'fs'
 import { join, resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { homedir } from 'os'
@@ -17,6 +17,7 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
+const VERSION = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8')).version
 
 const INSTALL_DIR = join(homedir(), '.wave-alerts')
 const HOOKS_DIR = join(INSTALL_DIR, 'hooks')
@@ -38,9 +39,9 @@ const EVENTS = [
 
 // Colour carries urgency, animation carries kind. See README.
 const SCHEME = [
-  ['busy',     'UserPromptSubmit',  'spinner+spin',          '#FFE900', 'working, no action'],
+  ['busy',     'UserPromptSubmit',  'spinner+spin',          '#429DFF', 'working, no action'],
   ['input',    'PermissionRequest', 'hand+beat',             '#FF9500', 'needs a permission decision'],
-  ['waiting',  'Notification',      'circle-question+fade',  '#FF9500', 'idle, waiting on you'],
+  ['waiting',  'Notification',      'circle-question+fade',  '#FFE900', 'idle, waiting on you'],
   ['mcp',      'Elicitation',       'message-question+beat', '#BF55EC', 'an MCP server wants input'],
   ['done',     'Stop',              'circle-check',          '#58C142', 'turn finished'],
   ['failed',   'StopFailure',       'triangle-exclamation+beat', '#FF453A', 'turn died on an API error'],
@@ -171,7 +172,7 @@ function runDoctor() {
   if (existsSync(settingsPath)) {
     const count = countRegisteredEvents(loadSettings(settingsPath))
     if (count === EVENTS.length) {
-      ok(`Both events registered in ${settingsPath}`)
+      ok(`All ${count} events registered in ${settingsPath}`)
     } else {
       fail(`${count}/${EVENTS.length} events registered — run "setup"`)
       allGood = false
@@ -216,7 +217,7 @@ Commands:
   setup       Install the hook and register it in Claude Code settings
   uninstall   Remove the hook and deregister it
   doctor      Check wsh, the hook script, and settings registration
-  test        Show the alert flag on the current tab for 20s
+  test        Cycle every state on the current tab, 4s each
 
 Alerts:
 ${SCHEME.map(([a,e,i,c,m]) => `  ${a.padEnd(9)} ${i.padEnd(23)} ${c.padEnd(8)} ${m}`).join('\n')}
@@ -234,7 +235,7 @@ try {
     case 'uninstall': runUninstall(); break
     case 'doctor':    runDoctor(); break
     case 'test':      runTest(); break
-    case '--version': case '-v': log('wave-claude-visual-alerts v0.2.0'); break
+    case '--version': case '-v': log(`wave-claude-visual-alerts v${VERSION}`); break
     case '--help': case '-h': case undefined: printHelp(); break
     default:
       log(`Unknown command: ${command}`)

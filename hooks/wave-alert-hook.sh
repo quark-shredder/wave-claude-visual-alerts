@@ -4,9 +4,9 @@
 # Called with one argument naming the state. The event name arrives as $1
 # rather than from the stdin JSON, so this script needs no jq and no parsing.
 #
-#   busy      spinner              yellow  working, no action needed
+#   busy      spinner              blue    working, no action needed
 #   input     hand                 orange  needs a permission decision
-#   waiting   circle-question      orange  idle, waiting on you
+#   waiting   circle-question      yellow  idle, waiting on you
 #   mcp       message-question     purple  an MCP server wants input
 #   done      circle-check         green   turn finished
 #   failed    triangle-exclamation red     turn died on an API error
@@ -50,13 +50,13 @@ case "$1" in
     kill_sentinel
     nohup bash -c "exec -a $SENTINEL sleep 86400" >/dev/null 2>&1 &
     "$WSH" badge "${WAVE_ALERT_ICON_BUSY:-spinner+spin}" \
-           --color "${WAVE_ALERT_COLOR_BUSY:-#FFE900}" --pid $! >/dev/null 2>&1
+           --color "${WAVE_ALERT_COLOR_BUSY:-#429DFF}" --pid $! >/dev/null 2>&1
     ;;
   input)
     alert "${WAVE_ALERT_ICON_INPUT:-hand+beat}" "${WAVE_ALERT_COLOR_INPUT:-#FF9500}"
     ;;
   waiting)
-    alert "${WAVE_ALERT_ICON_WAITING:-circle-question+fade}" "${WAVE_ALERT_COLOR_WAITING:-#FF9500}"
+    alert "${WAVE_ALERT_ICON_WAITING:-circle-question+fade}" "${WAVE_ALERT_COLOR_WAITING:-#FFE900}"
     ;;
   mcp)
     alert "${WAVE_ALERT_ICON_MCP:-message-question+beat}" "${WAVE_ALERT_COLOR_MCP:-#BF55EC}"
