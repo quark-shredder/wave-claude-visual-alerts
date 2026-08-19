@@ -157,6 +157,7 @@ The hook reads `WAVETERM_TABID` from the environment and exits silently if unset
 - **One badge per tab**, so two Claude sessions sharing a tab share the alert slot and the most recent event wins. Their busy spinners are per-block and don't collide. One session per tab — the usual layout — is unaffected.
 - **No duration threshold.** Claude Code has no "running longer than N minutes" event. `busy` covers the whole turn, however long.
 - **If something external clears the spinner mid-turn** — an over-broad `pkill -f wave-alert-busy` matches every tab, not just one — it returns on the next tool call rather than instantly.
+- **Interrupting a turn with Esc leaves the spinner running.** Claude Code fires no hook event on interrupt, so nothing tells the hook the turn ended. It clears when that session's next turn completes, or via `pkill -f wave-alert-busy-<tabid>`. The obvious fix — clearing it on the next prompt — was tried and reverted; see [DECISIONS.md](DECISIONS.md) before attempting it again.
 - **No workflow or `/loop` events.** Workflows surface as `SubagentStart`/`SubagentStop` per agent; `/loop` iterations are ordinary turns.
 
 ## Coexistence
