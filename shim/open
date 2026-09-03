@@ -1,0 +1,31 @@
+#!/bin/bash
+# `open` shim for Wave Terminal shells, installed by wave-claude-visual-alerts.
+#
+# Inside Wave, with only http(s) URLs as arguments, opens them in the Google
+# Chrome profile whose account matches the current Claude Code login. Every
+# other call (files, -a, flags, no args, any shell outside Wave) is handed to
+# /usr/bin/open unchanged. Nothing runs in the background.
+REAL=/usr/bin/open
+
+[ -n "$WAVETERM_BLOCKID" ] && [ $# -gt 0 ] || exec "$REAL" "$@"
+for arg in "$@"; do
+  case "$arg" in
+    http://*|https://*) ;;
+    *) exec "$REAL" "$@" ;;
+  esac
+done
+
+profile_dir=$(node -e '
+const fs = require("fs"), home = require("os").homedir()
+try {
+  const email = JSON.parse(fs.readFileSync(`${home}/.claude.json`, "utf8"))
+    .oauthAccount.emailAddress.toLowerCase()
+  const cache = JSON.parse(fs.readFileSync(
+    `${home}/Library/Application Support/Google/Chrome/Local State`, "utf8")).profile.info_cache
+  for (const [dir, info] of Object.entries(cache))
+    if ((info.user_name || "").toLowerCase() === email) { process.stdout.write(dir); break }
+} catch {}
+' 2>/dev/null)
+
+[ -n "$profile_dir" ] || exec "$REAL" "$@"
+exec "$REAL" -na "Google Chrome" --args --profile-directory="$profile_dir" "$@"

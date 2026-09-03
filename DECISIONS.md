@@ -5,6 +5,46 @@ and rejected. Newest first.
 
 ---
 
+## 2026-09-03 — URL-to-Chrome-profile routing is a PATH shim, opt-in, and does not cover clicks
+
+**Status:** shipped in 1.1.0 as `install-open-shim`.
+
+### The problem
+
+Claude Code publishes artifacts under the account it is logged in as. When
+Chrome's last-used profile is a different account, `open <url>` from Claude
+lands on a 404. Before this, the workaround was a rule telling Claude to pass
+`--profile-directory` by hand on every open.
+
+### Why not inside Wave
+
+Wave 0.14.5 has no setting for an external browser or profile. Its own link
+clicks go through Electron's `openExternal`, straight to the macOS default
+browser. `open` from a shell never touches Wave at all. Making Wave own this
+means forking it.
+
+### Why a shim over a default-browser router
+
+[Finicky](https://github.com/johnste/finicky) (v4) can do this at the
+default-browser layer and covers clicks too; verified in its source that a
+browser rule takes a `profile` and launches with `--profile-directory`. It was
+not chosen because it is system-wide, static (the profile is hardcoded in
+config, not derived from the Claude login), and a third app to install. The
+shim is scoped to Wave shells via `WAVETERM_BLOCKID`, re-derives the profile
+from `~/.claude.json` on every call, and is one file.
+
+### Consequences accepted
+
+- **Clicked links in Wave are not routed.** Documented in the README. Users who
+  need that should use Finicky; the shim and Finicky coexist fine.
+- **macOS only.** The command refuses on other platforms.
+- **Resolver uses `node`, not `python3`.** The package already needs Node 18;
+  on a Mac without Xcode CLT, `python3` can trigger an install prompt.
+- **PATH is not edited automatically.** The installer prints the line. Editing
+  rc files unasked is how tools become untrustworthy.
+
+---
+
 ## 2026-08-19 — A spinner left by an interrupted turn is not cleared on the next prompt
 
 **Status:** reverted, deliberately. Implemented in `b535f5f`, reverted in `9703e17`.

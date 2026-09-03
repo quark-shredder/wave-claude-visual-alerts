@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, copyFileSync, chmodSync, rmSync, readdirSync, re
 import { join, resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { homedir } from 'os'
-import { execFileSync } from 'child_process'
+import { execFileSync, execSync } from 'child_process'
 import {
   findSettingsPath,
   loadSettings,
@@ -23,6 +23,10 @@ const INSTALL_DIR = join(homedir(), '.wave-alerts')
 const HOOKS_DIR = join(INSTALL_DIR, 'hooks')
 const INSTALLED_HOOK = join(HOOKS_DIR, 'wave-alert-hook.sh')
 const SOURCE_HOOK = join(ROOT, 'hooks', 'wave-alert-hook.sh')
+const SHIM_DIR = join(INSTALL_DIR, 'bin')
+const INSTALLED_SHIM = join(SHIM_DIR, 'open')
+const SOURCE_SHIM = join(ROOT, 'shim', 'open')
+const SHIM_PATH_LINE = 'export PATH="$HOME/.wave-alerts/bin:$PATH"'
 const HOOK_TIMEOUT = 3
 
 // Claude Code event -> argument passed to the hook script.
@@ -134,11 +138,15 @@ function runUninstall() {
     rmSync(INSTALLED_HOOK)
     ok(`Removed: ${INSTALLED_HOOK}`)
   }
+  if (existsSync(INSTALLED_SHIM)) {
+    rmSync(INSTALLED_SHIM)
+    ok(`Removed: ${INSTALLED_SHIM} — drop the PATH line from your shell rc too`)
+  }
   try {
-    if (existsSync(HOOKS_DIR) && readdirSync(HOOKS_DIR).length === 0) {
-      rmSync(HOOKS_DIR, { recursive: true })
-      rmSync(INSTALL_DIR, { recursive: true, force: true })
+    for (const dir of [HOOKS_DIR, SHIM_DIR]) {
+      if (existsSync(dir) && readdirSync(dir).length === 0) rmSync(dir, { recursive: true })
     }
+    if (existsSync(INSTALL_DIR) && readdirSync(INSTALL_DIR).length === 0) rmSync(INSTALL_DIR)
   } catch { /* leave it */ }
 
   log('\n  Note: tabs you flagged by hand are untouched — this tool never\n  writes tab:flagcolor.\n')
@@ -185,6 +193,14 @@ function runDoctor() {
     allGood = false
   }
 
+  log('[opt] Open shim (optional)...')
+  if (existsSync(INSTALLED_SHIM)) {
+    shimOnPath() ? ok(`Installed and first on PATH: ${INSTALLED_SHIM}`)
+                 : fail(`Installed but not on PATH — add to your shell rc:  ${SHIM_PATH_LINE}`)
+  } else {
+    log('  - Not installed. "install-open-shim" routes URLs to the Chrome profile of your Claude login.')
+  }
+
   log(allGood ? '\n  ✅ Everything looks good!\n'
               : '\n  ⚠  Some issues found. Fix them and run doctor again.\n')
 }
@@ -213,6 +229,48 @@ function runTest() {
   ok('Cycle complete — everything cleared.\n')
 }
 
+function shimOnPath() {
+  try {
+    return execSync('command -v open', { encoding: 'utf-8' }).trim() === INSTALLED_SHIM
+  } catch {
+    return false
+  }
+}
+
+function runInstallOpenShim() {
+  log('\n🌊 wave-claude-visual-alerts install-open-shim\n')
+  if (process.platform !== 'darwin') {
+    fail('The open shim is macOS-only (it drives Google Chrome via /usr/bin/open).')
+    log('')
+    return
+  }
+  mkdirSync(SHIM_DIR, { recursive: true })
+  copyFileSync(SOURCE_SHIM, INSTALLED_SHIM)
+  chmodSync(INSTALLED_SHIM, 0o755)
+  ok(`Shim installed: ${INSTALLED_SHIM}`)
+
+  if (shimOnPath()) {
+    ok('Already first on PATH')
+  } else {
+    log(`\n  Add this to your ~/.zshrc (or ~/.bashrc), then open a new Wave tab:\n\n    ${SHIM_PATH_LINE}\n`)
+  }
+  log('  Inside Wave, `open <url>` now lands in the Chrome profile whose account')
+  log('  matches your Claude Code login. Files, flags, and non-Wave shells pass through.')
+  log('  Clicked links in Wave are not covered — those go to the macOS default browser.\n')
+}
+
+function runUninstallOpenShim() {
+  log('\n🌊 wave-claude-visual-alerts uninstall-open-shim\n')
+  if (existsSync(INSTALLED_SHIM)) {
+    rmSync(INSTALLED_SHIM)
+    ok(`Removed: ${INSTALLED_SHIM}`)
+    try { if (readdirSync(SHIM_DIR).length === 0) rmSync(SHIM_DIR, { recursive: true }) } catch { /* leave it */ }
+    log(`\n  Remove this line from your shell rc if you added it:\n\n    ${SHIM_PATH_LINE}\n`)
+  } else {
+    log('  Shim not installed.\n')
+  }
+}
+
 function printHelp() {
   log(`
 🌊 wave-claude-visual-alerts — flag the Wave tab when Claude wants you
@@ -224,6 +282,11 @@ Commands:
   uninstall   Remove the hook and deregister it
   doctor      Check wsh, the hook script, and settings registration
   test        Cycle every state on the current tab, 4s each
+
+Optional (macOS):
+  install-open-shim    Make "open <url>" inside Wave use the Chrome profile
+                       matching your Claude Code login
+  uninstall-open-shim  Remove it
 
 Alerts:
 ${SCHEME.map(([a,e,i,c,m]) => `  ${a.padEnd(9)} ${i.padEnd(23)} ${c.padEnd(8)} ${m}`).join('\n')}
@@ -241,6 +304,8 @@ try {
     case 'uninstall': runUninstall(); break
     case 'doctor':    runDoctor(); break
     case 'test':      runTest(); break
+    case 'install-open-shim':   runInstallOpenShim(); break
+    case 'uninstall-open-shim': runUninstallOpenShim(); break
     case '--version': case '-v': log(`wave-claude-visual-alerts v${VERSION}`); break
     case '--help': case '-h': case undefined: printHelp(); break
     default:

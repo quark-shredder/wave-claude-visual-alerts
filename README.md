@@ -79,6 +79,7 @@ npx wave-claude-visual-alerts setup      # Install hook + register in settings.j
 npx wave-claude-visual-alerts uninstall  # Deregister + remove hook
 npx wave-claude-visual-alerts doctor     # Check wsh, hook script, registration
 npx wave-claude-visual-alerts test       # Cycle every state, 4s each
+npx wave-claude-visual-alerts install-open-shim   # Optional, macOS — see below
 ```
 
 ## Requirements
@@ -140,6 +141,21 @@ Useful ones for alerts:
 ### Colours
 
 Any hex (`#RRGGBB`, `#RRGGBBAA`) or CSS colour name. The defaults come from Wave's own flag palette: green `#58C142`, teal `#00FFDB`, blue `#429DFF`, purple `#BF55EC`, red `#FF453A`, orange `#FF9500`, yellow `#FFE900`.
+
+## Optional: `open` URLs in the right Chrome profile (macOS)
+
+If Claude Code is logged into one account and Chrome opens with another, every `open <url>` Claude runs lands on the wrong profile, and account-scoped pages (artifacts, Jira, Confluence) 404. This is separate from the alerts and off by default:
+
+```bash
+npx wave-claude-visual-alerts install-open-shim
+# then add to ~/.zshrc:  export PATH="$HOME/.wave-alerts/bin:$PATH"
+```
+
+It installs `~/.wave-alerts/bin/open`, a 30-line shell script shadowing `/usr/bin/open`. Inside a Wave shell, a call with only http(s) URLs is routed to the Chrome profile whose account matches `oauthAccount.emailAddress` in `~/.claude.json`, resolved through Chrome's `Local State` at call time, so switching Claude login switches profile with nothing to reconfigure. Anything else — file paths, `-a`, no arguments, any shell without `WAVETERM_BLOCKID` — passes straight through. It is not a daemon; it runs only for the duration of an `open` call.
+
+**Not covered:** links you *click* in Wave. Electron hands those to the macOS default browser directly, and Wave has no setting for a target browser. If you need clicks routed too, a URL router such as [Finicky](https://github.com/johnste/finicky) as the default browser is the right layer; see [DECISIONS.md](DECISIONS.md).
+
+`uninstall-open-shim` removes it; plain `uninstall` removes it along with everything else.
 
 ## How It Works
 
