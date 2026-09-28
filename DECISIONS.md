@@ -5,6 +5,81 @@ and rejected. Newest first.
 
 ---
 
+## 2026-09-29 — New states only where the case was shown to exist
+
+**Status:** shipped in 1.2.0.
+
+Each candidate was checked before any handling was built. "Live" means a
+real Claude Code 2.1.283 session with every hook logged; "code" means read
+from the 2.1.283 binary because the situation cannot be triggered on demand.
+
+| Candidate | Evidence | Result |
+|---|---|---|
+| Turn ends on a question | Live: `Stop` carries `last_assistant_message` ("Which color do you prefer, red or blue?") | Built: `done` shows yellow when it ends in `?` |
+| Esc during a tool call, via `PostToolUseFailure.is_interrupt` | Live: `PreToolUse`, Esc, then nothing — no `PostToolUseFailure`, no `Stop` | Not built. Esc is still silent |
+| Usage limit reset / auto-continue off | Code: `quota_auto_resume_stale` "press enter to continue"; `_disabled` "will not resume on its own" | Built: `limit` |
+| Auto-continue fired | Code: `quota_auto_resume_fired` "Claude is continuing your task" | Built: routed to `busy` |
+| Claude driving mouse and keyboard | Code: `computer_use_enter` / `_exit` reach the Notification hook via `onOSNotification` | Built: `computer`, cleared on exit |
+| Teammate needs permission | Code: lead session's inbox poller sends `worker_permission_prompt` and opens the dialog there | Built: routed to `input` |
+| `AskUserQuestion` dialog | Live: fires `PermissionRequest` | Already shown as `input`; nothing built |
+| `agent_completed`, `PreCompact`/`PostCompact`, `PermissionDenied` | Nothing for you to act on | Not built, same reasoning as `SubagentStop` |
+
+### Why `Notification` is one registration
+
+`setup` registers one entry per event and replaces any earlier wave entry for
+that event, so several `Notification` entries with different arguments would
+overwrite each other. Instead one entry lists every type, and the hook reads
+`notification_type` from stdin. The hot `PreToolUse` path still reads no stdin.
+
+### Accepted
+
+- The question check is a heuristic: a message ending in `?`, after trailing
+  newlines, spaces, `*`, `_` and backticks. A message that ends in a quoted
+  question (`"ok?"`) stays green.
+- `computer_use_exit` clears the tab badge, which would also clear any other
+  alert set while Claude held the computer.
+- The quota, computer-use and worker cases are verified from code only.
+
+---
+
+## 2026-09-28 — `idle_prompt` no longer shows yellow; it cannot clear the Esc spinner either
+
+**Status:** `Notification` matcher narrowed from `idle_prompt|agent_needs_input`
+to `agent_needs_input`.
+
+### The problem
+
+Finished tabs turned from green to yellow "waiting on you" although Claude had
+asked nothing.
+
+### Why it happened
+
+In Claude Code 2.1.283, `idle_prompt` ("Claude is waiting for your input") is
+sent once `messageIdleNotifThresholdMs` (default 60000) passes after a turn
+completes with no keypress since. It fires after every finished turn,
+question or not. Both badges sit on the tab, so the later yellow replaced the
+green.
+
+### Measured: one run each, interactive session driven by `expect`, hooks logged
+
+```
+normal turn:  23:28:18 Stop   23:29:18 Notification idle_prompt   (60 s later)
+Esc mid-turn: 23:24:57 Esc    ... nothing for 96 s, no Stop, no Notification
+```
+
+### Consequences
+
+- **The `idle_prompt` route in the 2026-08-19 entry is closed.** It does not
+  fire after an interrupt, so it cannot clear the stale spinner. And after a
+  normal turn the spinner is already gone, so it has nothing to do there.
+- Yellow now means only `agent_needs_input`: a background agent, teammate or
+  setup dialog is blocked on you.
+- Untested lead for the Esc spinner: `PostToolUseFailure` carries
+  `is_interrupt`. It could only cover an Esc during a tool call, not during
+  text output as in the run above.
+
+---
+
 ## 2026-09-03 — URL-to-Chrome-profile routing is a PATH shim, opt-in, and does not cover clicks
 
 **Status:** shipped in 1.1.0 as `install-open-shim`.

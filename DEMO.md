@@ -12,9 +12,10 @@ Pause a few seconds between steps so the viewer can see the tab badge change.
 
 ## Step 1: Announce
 
-> "This turns the Wave tab bar into a status board for Claude Code. Yellow
-> means working, orange means blocked on you, green means done, red means it
-> failed. Only the ones that need you animate."
+> "This turns the Wave tab bar into a status board for Claude Code. Blue
+> means working, yellow means it asked you something, orange means blocked on
+> you, green means done, red means it failed. Only the ones that need you
+> animate."
 
 ---
 

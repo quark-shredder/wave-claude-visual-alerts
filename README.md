@@ -23,7 +23,8 @@ No restart needed — Claude Code hot-reloads `settings.json`.
 |---|---|---|---|
 | 🔵 | Blue `#429DFF` | working | no |
 | 🟢 | Green `#58C142` | finished | no |
-| 🟡 | Yellow `#FFE900` | idle, waiting on you | soon |
+| 🩵 | Teal `#00FFDB` | using your mouse and keyboard | no — hands off |
+| 🟡 | Yellow `#FFE900` | asked you something, or paused on a usage limit | soon |
 | 🟠 | Orange `#FF9500` | blocked on you | now |
 | 🔴 | Red `#FF453A` | failed | now |
 | 🟣 | Purple `#BF55EC` | MCP wants input | now (external) |
@@ -47,13 +48,27 @@ A working tab should never compete for attention with a blocked one. Only the st
 |---|---|---|---|---|
 | `busy` | `UserPromptSubmit`, `PreToolUse` | `spinner+spin` | 🔵 `#429DFF` | Claude is working |
 | `input` | `PermissionRequest` | `hand+beat` | 🟠 `#FF9500` | Needs a permission decision |
-| `waiting` | `Notification` | `circle-question+fade` | 🟡 `#FFE900` | Idle, waiting on you |
+| `waiting` | `Stop`, `Notification` | `circle-question+fade` | 🟡 `#FFE900` | Claude's last message ends in a question, or a background agent needs your input |
+| `limit` | `Notification` | `hourglass-end+fade` | 🟡 `#FFE900` | Usage limit reset or auto-continue stopped; press Enter to continue |
 | `mcp` | `Elicitation` | `message-question+beat` | 🟣 `#BF55EC` | An MCP server wants input |
+| `computer` | `Notification` | `computer-mouse` | 🩵 `#00FFDB` | Claude is using your mouse and keyboard; cleared when it hands them back |
 | `done` | `Stop` | `circle-check` | 🟢 `#58C142` | Turn finished |
 | `failed` | `StopFailure` | `triangle-exclamation+beat` | 🔴 `#FF453A` | Turn died on an API error |
 | `end` | `SessionEnd` | — | — | Session over; clears everything |
 
-`Notification` is matched on `idle_prompt|agent_needs_input` so ordinary notifications don't trigger it. This is the only matcher filtering on a value rather than `*`; if Claude Code compares matchers literally rather than as regex it will simply never fire, which is harmless.
+`Stop` shows yellow instead of green when Claude's last message ends in `?`. Claude Code passes that message to the hook as `last_assistant_message`, and the hook reads it with `sed`, not `jq`.
+
+`Notification` is registered once, for these types only, and the hook routes each by its `notification_type`:
+
+| Type | State |
+|---|---|
+| `agent_needs_input` | `waiting` |
+| `worker_permission_prompt` (a teammate needs permission) | `input` |
+| `quota_auto_resume_stale`, `quota_auto_resume_disabled` | `limit` |
+| `quota_auto_resume_fired` (Claude resumes by itself) | `busy` |
+| `computer_use_enter` / `computer_use_exit` | `computer` on / cleared |
+
+`idle_prompt` is deliberately left out: it fires 60 seconds after *every* finished turn you haven't answered, so it turned each unvisited green tab yellow. `AskUserQuestion` needs nothing extra: it fires `PermissionRequest`, so it already shows `input`. See the [decision log](DECISIONS.md).
 
 **`SubagentStop` is deliberately not used.** A subagent finishing means the main turn is still running, which `busy` already covers. Worse, its badge would outrank the spinner and leave an inactive tab showing "a subagent finished" while it is actually still working.
 
@@ -99,7 +114,7 @@ export WAVE_ALERT_COLOR_BUSY="#8E8E93"      # grey instead of blue
 export WAVE_ALERT_ICON_BUSY="hourglass+spin"
 ```
 
-Pattern is `WAVE_ALERT_COLOR_<STATE>` and `WAVE_ALERT_ICON_<STATE>`, where `<STATE>` is one of `BUSY`, `INPUT`, `WAITING`, `MCP`, `DONE`, `FAILED`.
+Pattern is `WAVE_ALERT_COLOR_<STATE>` and `WAVE_ALERT_ICON_<STATE>`, where `<STATE>` is one of `BUSY`, `INPUT`, `WAITING`, `LIMIT`, `MCP`, `COMPUTER`, `DONE`, `FAILED`.
 
 ### Icons
 

@@ -1,13 +1,17 @@
 #!/bin/bash
 # wave-claude-alerts — show Claude Code's state on the Wave Terminal tab.
 #
-# Called with one argument naming the state. The event name arrives as $1
-# rather than from the stdin JSON, so this script needs no jq and no parsing.
+# Called with one argument naming the state. The state arrives as $1, so no
+# jq is needed. Only two arguments read the stdin JSON, with sed: `done`, to
+# see whether Claude's last message asks you something, and `notify`, which
+# routes a Notification to a state by its type.
 #
 #   busy      spinner              blue    working, no action needed
 #   input     hand                 orange  needs a permission decision
-#   waiting   circle-question      yellow  idle, waiting on you
+#   waiting   circle-question      yellow  Claude or an agent asked you something
+#   limit     hourglass-end        yellow  usage limit: press Enter to continue
 #   mcp       message-question     purple  an MCP server wants input
+#   computer  computer-mouse       teal    Claude is using your mouse and keyboard
 #   done      circle-check         green   turn finished
 #   failed    triangle-exclamation red     turn died on an API error
 #   end       -                    -       session over: clean up
@@ -15,7 +19,8 @@
 # Two objects, deliberately:
 #
 #   Alerts go on the TAB. Wave clears them itself when you focus the tab
-#   (its BadgeAutoClearing component), so nothing here ever clears them.
+#   (its BadgeAutoClearing component). The one alert cleared here is
+#   `computer`, when Claude hands your mouse and keyboard back.
 #
 #   The busy spinner goes on the BLOCK and is pinned to a sentinel process
 #   with --pid, which makes Wave's auto-clear skip it. So it survives focus,
@@ -78,7 +83,43 @@ alert() {
   "$WSH" badge "$1" --color "$2" --priority "${3:-10}" -b "$TAB" >/dev/null 2>&1
 }
 
-case "$1" in
+# Does Claude's last message, in the Stop JSON on stdin, end in a question?
+# The value is still JSON-escaped, so a trailing newline is the two
+# characters \n. Trailing markdown emphasis is stripped too: "**Proceed?**".
+asked_question() {
+  [ -t 0 ] && return 1
+  t=$(sed -nE 's/.*"last_assistant_message":"(([^"\\]|\\.)*)".*/\1/p')
+  while :; do
+    case "$t" in
+      *'\n') t=${t%'\n'} ;;
+      *' '|*'*'|*'_'|*'`') t=${t%?} ;;
+      *) break ;;
+    esac
+  done
+  case "$t" in *'?') return 0 ;; esac
+  return 1
+}
+
+state=$1
+
+# One Notification registration covers several types; route each to a state.
+if [ "$state" = notify ]; then
+  [ -t 0 ] && exit 0
+  type=$(sed -nE 's/.*"notification_type":"([a-z_]*)".*/\1/p')
+  case "$type" in
+    agent_needs_input)          state=waiting ;;
+    worker_permission_prompt)   state=input ;;
+    quota_auto_resume_fired)    state=busy ;;
+    quota_auto_resume_stale|quota_auto_resume_disabled) state=limit ;;
+    computer_use_enter)         state=computer ;;
+    computer_use_exit)
+      "$WSH" badge --clear -b "$TAB" >/dev/null 2>&1
+      exit 0 ;;
+    *) exit 0 ;;
+  esac
+fi
+
+case "$state" in
   busy)
     # Already spinning: leave it alone. Never kill-and-respawn here — Wave
     # clears badges by oref rather than badge id, and does it asynchronously
@@ -98,12 +139,22 @@ case "$1" in
   waiting)
     alert "${WAVE_ALERT_ICON_WAITING:-circle-question+fade}" "${WAVE_ALERT_COLOR_WAITING:-#FFE900}"
     ;;
+  limit)
+    alert "${WAVE_ALERT_ICON_LIMIT:-hourglass-end+fade}" "${WAVE_ALERT_COLOR_LIMIT:-#FFE900}"
+    ;;
   mcp)
     alert "${WAVE_ALERT_ICON_MCP:-message-question+beat}" "${WAVE_ALERT_COLOR_MCP:-#BF55EC}"
     ;;
+  computer)
+    alert "${WAVE_ALERT_ICON_COMPUTER:-computer-mouse}" "${WAVE_ALERT_COLOR_COMPUTER:-#00FFDB}"
+    ;;
   done)
     kill_sentinel
-    alert "${WAVE_ALERT_ICON_DONE:-circle-check}" "${WAVE_ALERT_COLOR_DONE:-#58C142}"
+    if asked_question; then
+      alert "${WAVE_ALERT_ICON_WAITING:-circle-question+fade}" "${WAVE_ALERT_COLOR_WAITING:-#FFE900}"
+    else
+      alert "${WAVE_ALERT_ICON_DONE:-circle-check}" "${WAVE_ALERT_COLOR_DONE:-#58C142}"
+    fi
     ;;
   failed)
     kill_sentinel

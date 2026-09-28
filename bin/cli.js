@@ -37,7 +37,10 @@ const EVENTS = [
   // PreToolUse arms the spinner too. It exits in ~5ms when already spinning.
   { event: 'PreToolUse', arg: 'busy', matcher: '*' },
   { event: 'PermissionRequest', arg: 'input', matcher: '*' },
-  { event: 'Notification', arg: 'waiting', matcher: 'idle_prompt|agent_needs_input' },
+  // One registration for every Notification type we show; the hook reads
+  // notification_type from stdin and routes it. idle_prompt is left out on
+  // purpose — it fires after every unanswered turn. See DECISIONS.md.
+  { event: 'Notification', arg: 'notify', matcher: 'agent_needs_input|worker_permission_prompt|quota_auto_resume_fired|quota_auto_resume_stale|quota_auto_resume_disabled|computer_use_enter|computer_use_exit' },
   { event: 'Elicitation', arg: 'mcp', matcher: '*' },
   { event: 'Stop', arg: 'done' },
   { event: 'StopFailure', arg: 'failed', matcher: '*' },
@@ -48,8 +51,10 @@ const EVENTS = [
 const SCHEME = [
   ['busy',     'UserPromptSubmit/PreToolUse', 'spinner+spin',   '#429DFF', 'working, no action'],
   ['input',    'PermissionRequest', 'hand+beat',             '#FF9500', 'needs a permission decision'],
-  ['waiting',  'Notification',      'circle-question+fade',  '#FFE900', 'idle, waiting on you'],
+  ['waiting',  'Stop/Notification', 'circle-question+fade',  '#FFE900', 'Claude or an agent asked you something'],
+  ['limit',    'Notification',      'hourglass-end+fade',    '#FFE900', 'usage limit: press Enter to continue'],
   ['mcp',      'Elicitation',       'message-question+beat', '#BF55EC', 'an MCP server wants input'],
+  ['computer', 'Notification',      'computer-mouse',        '#00FFDB', 'Claude is using your mouse and keyboard'],
   ['done',     'Stop',              'circle-check',          '#58C142', 'turn finished'],
   ['failed',   'StopFailure',       'triangle-exclamation+beat', '#FF453A', 'turn died on an API error'],
   ['end',      'SessionEnd',        '(clears everything)',   '-',       'session over'],
