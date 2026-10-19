@@ -15,22 +15,22 @@ No restart needed — Claude Code hot-reloads `settings.json`.
 
 ## The Scheme
 
-**Colour carries urgency. Animation carries kind.**
+**Colour carries urgency. Icon and animation carry kind.**
 
-**Cool colours need nothing from you. Warm colours escalate.**
+**Cool colours need nothing from you. Warm colours escalate.** Six colours, all from Wave's own flag palette, each with exactly one urgency:
 
-| | Colour | State | Needs you? |
+| | Colour | Means | Needs you? |
 |---|---|---|---|
-| ⚪ | Grey `#8E8E93` | session open, idle | no |
-| 🔵 | Blue `#429DFF` | working | no |
+| 🩵 | Teal `#00FFDB` | a Claude session is live here, idle | no |
+| 🔵 | Blue `#429DFF` | working (spinner), or driving your mouse and keyboard | no |
 | 🟢 | Green `#58C142` | finished | no |
-| 🩵 | Teal `#00FFDB` | using your mouse and keyboard | no — hands off |
 | 🟡 | Yellow `#FFE900` | asked you something, or paused on a usage limit | soon |
-| 🟠 | Orange `#FF9500` | blocked on you | now |
+| 🟠 | Orange `#FF9500` | blocked on you: permission, MCP input, a teammate | now |
 | 🔴 | Red `#FF453A` | failed | now |
-| 🟣 | Purple `#BF55EC` | MCP wants input | now (external) |
 
-Temperature encodes urgency, so you can rank three states without remembering what any colour "means": yellow → orange → red is *waiting* → *blocked* → *broken*. Purple sits outside the ladder because an MCP elicitation is a different category — an external system, not Claude.
+No icon means no Claude session in that tab.
+
+Temperature encodes urgency, so you can rank states without remembering what any colour "means": teal → blue → green is *live* → *working* → *done*, and yellow → orange → red is *waiting* → *blocked* → *broken*. When an alert pushes the block badge into a 4 px dot, only its colour shows, which is why a colour never stands for two urgencies. *What* is asking is the icon's job: a hand for a permission, a speech bubble for MCP.
 
 Animation carries kind rather than urgency:
 
@@ -47,13 +47,13 @@ A working tab should never compete for attention with a blocked one. Only the st
 
 | State | Claude Code event | Icon | Colour | Meaning |
 |---|---|---|---|---|
-| `session` | `SessionStart` (startup, resume, clear), and after every `Stop` / `StopFailure` | `asterisk` | ⚪ `#8E8E93` | A Claude session is open in this tab. Always on until Claude exits |
+| `session` | `SessionStart` (startup, resume, clear), and after every `Stop` / `StopFailure` | `wave-pulse+fade` | 🩵 `#00FFDB` | A Claude session is open in this tab. Always on until Claude exits |
 | `busy` | `UserPromptSubmit`, `PreToolUse` | `spinner+spin` | 🔵 `#429DFF` | Claude is working |
 | `input` | `PermissionRequest` | `hand+beat` | 🟠 `#FF9500` | Needs a permission decision |
 | `waiting` | `Stop`, `Notification` | `circle-question+fade` | 🟡 `#FFE900` | Claude's last message ends in a question, or a background agent needs your input |
 | `limit` | `Notification` | `hourglass-end+fade` | 🟡 `#FFE900` | Usage limit reset or auto-continue stopped; press Enter to continue |
-| `mcp` | `Elicitation` | `message-question+beat` | 🟣 `#BF55EC` | An MCP server wants input |
-| `computer` | `Notification` | `computer-mouse` | 🩵 `#00FFDB` | Claude is using your mouse and keyboard; cleared when it hands them back |
+| `mcp` | `Elicitation` | `message-question+beat` | 🟠 `#FF9500` | An MCP server wants input |
+| `computer` | `Notification` | `computer-mouse` | 🔵 `#429DFF` | Claude is using your mouse and keyboard; cleared when it hands them back |
 | `done` | `Stop` | `circle-check` | 🟢 `#58C142` | Turn finished |
 | `failed` | `StopFailure` | `triangle-exclamation+beat` | 🔴 `#FF453A` | Turn died on an API error |
 | `end` | `SessionEnd` | — | — | Session over; clears everything |
@@ -79,7 +79,7 @@ A working tab should never compete for attention with a blocked one. Only the st
 Wave allows **one badge per object**, so a naive implementation has every state overwrite the last. This uses two objects deliberately:
 
 - **Alerts go on the tab.** Wave ≥ 0.14.2 ships a `BadgeAutoClearing` component that removes a tab badge ~500 ms after you focus that tab (3 s if you were already there). So there are no clear-hooks, no state directory, and no way for a stale alert to stick.
-- **The block holds one always-on badge while Claude runs**: the grey session indicator when idle, the blue spinner while working. Both are pinned to Claude's own pid via `wsh badge --pid`. Pid-linked badges are skipped by auto-clear, so they survive you looking at the tab, and Wave removes them itself within a second of Claude exiting, even on a crash.
+- **The block holds one always-on badge while Claude runs**: the pulsing teal session indicator when idle, the blue spinner while working. Both are pinned to Claude's own pid via `wsh badge --pid`. Pid-linked badges are skipped by auto-clear, so they survive you looking at the tab, and Wave removes them itself within a second of Claude exiting, even on a crash.
 
 Wave only lets a new badge replace one of lower priority, or of equal priority and older. The spinner (5) outranks the indicator (−1), so going busy is a single set; going idle is a clear, then a set. A pid exit clears by badge id, so it can never wipe a newer badge.
 
@@ -91,19 +91,19 @@ Badges sort by priority, highest first: failures 15, alerts 10, spinner 5, a man
 
 | While… | Main icon | Dot beside it |
 |---|---|---|
-| idle, nothing pending | ⚪ session | — |
+| idle, nothing pending | 🩵 session | — |
 | working | 🔵 spinner | — |
-| working and blocked (permission, `AskUserQuestion`, MCP, teammate) | 🟠 / 🟣 alert | 🔵 spinner |
-| turn just ended, not yet looked at | 🟢 done / 🟡 question / 🔴 failed | ⚪ session |
-| paused on a usage limit | 🟡 hourglass | ⚪ session |
-| after you focus the tab | ⚪ session | — |
+| working and blocked (permission, `AskUserQuestion`, MCP, teammate) | 🟠 alert | 🔵 spinner |
+| turn just ended, not yet looked at | 🟢 done / 🟡 question / 🔴 failed | 🩵 session |
+| paused on a usage limit | 🟡 hourglass | 🩵 session |
+| after you focus the tab | 🩵 session | — |
 | Claude exited, or no Claude in this tab | nothing | — |
 
 Sessions that were already open when you run `setup` get the indicator straight away: `setup` finds each running `claude` in a Wave block and pins one to it. A session that is mid-turn keeps its spinner, since the spinner outranks it.
 
 ## Plays Nicely With Manually Flagged Tabs
 
-If you use Wave's **Flag Tab** right-click menu to colour-code tabs, this never disturbs it — it does not write `tab:flagcolor`. Wave merges your manual flag as a synthetic `priority: 0` badge, so alerts and the spinner outrank it, and it returns to the main slot once they clear. The session indicator sits just *below* the flag (−1), so a flagged tab keeps its flag as the main icon and shows the session as a grey dot beside it.
+If you use Wave's **Flag Tab** right-click menu to colour-code tabs, this never disturbs it — it does not write `tab:flagcolor`. Wave merges your manual flag as a synthetic `priority: 0` badge, so alerts and the spinner outrank it, and it returns to the main slot once they clear. The session indicator sits just *below* the flag (−1), so a flagged tab keeps its flag as the main icon and shows the session as a teal dot beside it.
 
 ## Commands
 
@@ -173,7 +173,7 @@ Useful ones for alerts:
 
 ### Colours
 
-Any hex (`#RRGGBB`, `#RRGGBBAA`) or CSS colour name. The defaults come from Wave's own flag palette: green `#58C142`, teal `#00FFDB`, blue `#429DFF`, purple `#BF55EC`, red `#FF453A`, orange `#FF9500`, yellow `#FFE900`.
+Any hex (`#RRGGBB`, `#RRGGBBAA`) or CSS colour name. The defaults come from Wave's own flag palette: green `#58C142`, teal `#00FFDB`, blue `#429DFF`, red `#FF453A`, orange `#FF9500`, yellow `#FFE900`. Its seventh, purple `#BF55EC`, is left unused, free for your own flags.
 
 ## Optional: `open` URLs in the right Chrome profile (macOS)
 

@@ -52,13 +52,13 @@ const EVENTS = [
 
 // Colour carries urgency, animation carries kind. See README.
 const SCHEME = [
-  ['session',  'SessionStart/Stop', 'asterisk',              '#8E8E93', 'Claude session open, idle'],
+  ['session',  'SessionStart/Stop', 'wave-pulse+fade',       '#00FFDB', 'Claude session open, idle'],
   ['busy',     'UserPromptSubmit/PreToolUse', 'spinner+spin',   '#429DFF', 'working, no action'],
   ['input',    'PermissionRequest', 'hand+beat',             '#FF9500', 'needs a permission decision'],
   ['waiting',  'Stop/Notification', 'circle-question+fade',  '#FFE900', 'Claude or an agent asked you something'],
   ['limit',    'Notification',      'hourglass-end+fade',    '#FFE900', 'usage limit: press Enter to continue'],
-  ['mcp',      'Elicitation',       'message-question+beat', '#BF55EC', 'an MCP server wants input'],
-  ['computer', 'Notification',      'computer-mouse',        '#00FFDB', 'Claude is using your mouse and keyboard'],
+  ['mcp',      'Elicitation',       'message-question+beat', '#FF9500', 'an MCP server wants input'],
+  ['computer', 'Notification',      'computer-mouse',        '#429DFF', 'Claude is using your mouse and keyboard'],
   ['done',     'Stop',              'circle-check',          '#58C142', 'turn finished'],
   ['failed',   'StopFailure',       'triangle-exclamation+beat', '#FF453A', 'turn died on an API error'],
   ['end',      'SessionEnd',        '(clears everything)',   '-',       'session over'],
@@ -174,8 +174,8 @@ function backfillOpenSessions(wsh) {
     const block = env.match(/\bWAVETERM_BLOCKID=(\S+)/)?.[1]
     if (!block || !UUID_RE.test(block)) continue
     try {
-      execFileSync(wsh, ['badge', process.env.WAVE_ALERT_ICON_SESSION || 'asterisk',
-        '--color', process.env.WAVE_ALERT_COLOR_SESSION || '#8E8E93',
+      execFileSync(wsh, ['badge', process.env.WAVE_ALERT_ICON_SESSION || 'wave-pulse+fade',
+        '--color', process.env.WAVE_ALERT_COLOR_SESSION || '#00FFDB',
         '--pid', pid, '--priority=-1', '-b', `block:${block}`], { stdio: 'ignore' })
       count++
     } catch { /* wsh unreachable from this shell */ }

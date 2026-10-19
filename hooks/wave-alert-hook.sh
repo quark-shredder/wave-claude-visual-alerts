@@ -6,13 +6,13 @@
 # see whether Claude's last message asks you something, and `notify`, which
 # routes a Notification to a state by its type.
 #
-#   session   asterisk             grey    a Claude session is open here, idle
+#   session   wave-pulse           teal    a Claude session is open here, idle
 #   busy      spinner              blue    working, no action needed
 #   input     hand                 orange  needs a permission decision
 #   waiting   circle-question      yellow  Claude or an agent asked you something
 #   limit     hourglass-end        yellow  usage limit: press Enter to continue
-#   mcp       message-question     purple  an MCP server wants input
-#   computer  computer-mouse       teal    Claude is using your mouse and keyboard
+#   mcp       message-question     orange  an MCP server wants input
+#   computer  computer-mouse       blue    Claude is using your mouse and keyboard
 #   done      circle-check         green   turn finished
 #   failed    triangle-exclamation red     turn died on an API error
 #   end       -                    -       session over: clean up
@@ -95,7 +95,7 @@ block_badge() {
 show_session() {
   [ -n "$BLOCK" ] || return 0
   "$WSH" badge --clear -b "$BLOCK" >/dev/null 2>&1
-  block_badge idle "${WAVE_ALERT_ICON_SESSION:-asterisk}" "${WAVE_ALERT_COLOR_SESSION:-#8E8E93}" -1
+  block_badge idle "${WAVE_ALERT_ICON_SESSION:-wave-pulse+fade}" "${WAVE_ALERT_COLOR_SESSION:-#00FFDB}" -1
 }
 
 # alert <icon> <color> [priority]  — on the tab, cleared by Wave on focus
@@ -160,10 +160,10 @@ case "$state" in
     alert "${WAVE_ALERT_ICON_LIMIT:-hourglass-end+fade}" "${WAVE_ALERT_COLOR_LIMIT:-#FFE900}"
     ;;
   mcp)
-    alert "${WAVE_ALERT_ICON_MCP:-message-question+beat}" "${WAVE_ALERT_COLOR_MCP:-#BF55EC}"
+    alert "${WAVE_ALERT_ICON_MCP:-message-question+beat}" "${WAVE_ALERT_COLOR_MCP:-#FF9500}"
     ;;
   computer)
-    alert "${WAVE_ALERT_ICON_COMPUTER:-computer-mouse}" "${WAVE_ALERT_COLOR_COMPUTER:-#00FFDB}"
+    alert "${WAVE_ALERT_ICON_COMPUTER:-computer-mouse}" "${WAVE_ALERT_COLOR_COMPUTER:-#429DFF}"
     ;;
   done)
     show_session

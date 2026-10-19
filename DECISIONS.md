@@ -38,6 +38,19 @@ the indicator whenever it does not hold the spinner. Both are pinned with
 - the `sleep 86400` sentinel and its pid file are gone. A crashed session no
   longer leaves a spinner for a day.
 
+Icon: `wave-pulse+fade`, chosen by the user over a grey `asterisk`, in a
+cyan `#64D2FF`. Moved to teal `#00FFDB`, the nearest colour in Wave's palette,
+when the user asked for one standard colour system. Wave accepts only `+spin`, `+beat` and `+fade`; spin would read as
+working and beat as urgent, so fade.
+
+**Colour system reset with it.** Colour now means urgency only, one urgency
+per colour, all six from Wave's flag palette: teal live, blue working, green
+done, yellow soon, orange now, red failed. Two states moved: MCP input
+purple → orange (it blocks Claude exactly like a permission prompt; the
+icon tells them apart), and computer use teal → blue (Claude is working).
+Purple is left free. The reason it matters: a 4 px dot shows colour only,
+so a colour that meant two urgencies would be unreadable there.
+
 Priorities: spinner 5, indicator −1. Just under the flag, so flagged tabs keep
 the flag as the main icon. Going busy is one set; going idle needs a clear
 first, because the indicator ranks below the spinner.

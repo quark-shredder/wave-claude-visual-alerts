@@ -37,7 +37,7 @@ states are exactly the ones where Claude has stopped and is waiting.
 Ask Claude to do something slow, then **switch to another tab**. The spinner
 keeps turning on the tab you left. When it finishes, it flips to a green check.
 
-Switch back: the green check clears itself within a second, leaving the grey
+Switch back: the green check clears itself within a second, leaving the pulsing teal
 session indicator. That is Wave, not this tool — nothing here ever clears an
 alert. Point at the tabs with no icon at all: no Claude session there.
 
