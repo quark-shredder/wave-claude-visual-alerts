@@ -5,6 +5,72 @@ and rejected. Newest first.
 
 ---
 
+## 2026-10-19 — Always-on session indicator; block badges pinned to Claude, not a sentinel
+
+**Status:** shipped in 1.3.0.
+
+### The ask
+
+Tell tabs with an open Claude session apart from tabs with none, including
+when the session is idle. Before this, an idle session's tab was blank once
+you had looked at it.
+
+### What Wave 0.14.5 actually does (read from its source and bundle)
+
+- **One badge per object.** A tab shows its own badge plus one per block,
+  sorted by priority: the top one as the 12 px icon, the next two as 4 px
+  dots. A manual flag joins as priority 0.
+- **A new badge only lands if it outranks the current one**, or ties and is
+  newer (`cmpBadge(incoming, existing) > 0`, in both the backend store and the
+  frontend). `--clear` always lands.
+- **A pid exit clears by badge id**, polling once a second, and only if that
+  badge is still current. This supersedes the 2026-08-19 note that Wave
+  "clears badges by oref": in 0.14.5 a stale clear cannot wipe a newer badge.
+
+### Design
+
+The tab keeps the alerts. The block, which held only the spinner, now holds
+the indicator whenever it does not hold the spinner. Both are pinned with
+`--pid` to **Claude's own pid** (the hook's `$PPID`, measured), so:
+
+- the badge goes when Claude exits, including on `kill -9`, with no
+  `SessionEnd`. Measured: killed at 14:17:20, cleared at 14:17:20.731;
+- the `sleep 86400` sentinel and its pid file are gone. A crashed session no
+  longer leaves a spinner for a day.
+
+Priorities: spinner 5, indicator −1. Just under the flag, so flagged tabs keep
+the flag as the main icon. Going busy is one set; going idle needs a clear
+first, because the indicator ranks below the spinner.
+
+`SessionStart` is matched on `startup|resume|clear`, not `compact`: auto-
+compaction can fire it mid-turn, and the indicator would replace the spinner
+while Claude works.
+
+`setup` backfills sessions already open, which fired `SessionStart` before
+the hook existed. It finds each `claude` process, reads `WAVETERM_BLOCKID`
+from its environment, skips any whose parent is also `claude`, and pins an
+indicator to it without a clear, so a busy block keeps its spinner.
+`pgrep -a` is needed: by default macOS `pgrep` drops its own ancestors,
+which hid the session running `setup`.
+
+### Verified, this machine, Wave 0.14.5, Claude Code 2.1.303
+
+Real sessions through the installed hook, with made-up tab and block ids so
+no visible tab changed, read back from `waveapp.log`: session start sets the
+indicator; the prompt sets the spinner; the next `PreToolUse` sets nothing;
+`Stop` clears, resets the indicator and turns the tab green; `SessionEnd`
+clears both. Backfill: 9 sent, 8 accepted; the 9th was a busy block whose
+spinner correctly outranked it.
+
+### Accepted
+
+- Wave starts one pid watcher per pinned badge, and they live until Claude
+  exits: about two per turn. Each is a once-a-second liveness check.
+- A crash leaves a few-byte `<blockid>.state` file. The next session in that
+  block has a different parent pid, so it is ignored.
+
+---
+
 ## 2026-09-29 — New states only where the case was shown to exist
 
 **Status:** shipped in 1.2.0.

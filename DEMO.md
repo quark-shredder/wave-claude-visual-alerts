@@ -37,15 +37,16 @@ states are exactly the ones where Claude has stopped and is waiting.
 Ask Claude to do something slow, then **switch to another tab**. The spinner
 keeps turning on the tab you left. When it finishes, it flips to a green check.
 
-Switch back: the green check clears itself within a second. That is Wave, not
-this tool — nothing here ever clears an alert.
+Switch back: the green check clears itself within a second, leaving the grey
+session indicator. That is Wave, not this tool — nothing here ever clears an
+alert. Point at the tabs with no icon at all: no Claude session there.
 
 ---
 
 ## Step 4: The spinner survives focus
 
 While Claude is still working, switch to its tab and stay there. The spinner
-keeps spinning rather than clearing, because it is pinned to a sentinel
+keeps spinning rather than clearing, because it is pinned to Claude's own
 process. Every other badge would have cleared.
 
 ---

@@ -32,6 +32,9 @@ const HOOK_TIMEOUT = 3
 // Claude Code event -> argument passed to the hook script.
 // Only events that support a matcher get one; Stop and UserPromptSubmit do not.
 const EVENTS = [
+  // Not 'compact': auto-compaction can start a session mid-turn, and the idle
+  // indicator would replace the spinner while Claude is still working.
+  { event: 'SessionStart', arg: 'session', matcher: 'startup|resume|clear' },
   { event: 'UserPromptSubmit', arg: 'busy' },
   // A turn started with a `!` bash command never fires UserPromptSubmit, so
   // PreToolUse arms the spinner too. It exits in ~5ms when already spinning.
@@ -49,6 +52,7 @@ const EVENTS = [
 
 // Colour carries urgency, animation carries kind. See README.
 const SCHEME = [
+  ['session',  'SessionStart/Stop', 'asterisk',              '#8E8E93', 'Claude session open, idle'],
   ['busy',     'UserPromptSubmit/PreToolUse', 'spinner+spin',   '#429DFF', 'working, no action'],
   ['input',    'PermissionRequest', 'hand+beat',             '#FF9500', 'needs a permission decision'],
   ['waiting',  'Stop/Notification', 'circle-question+fade',  '#FFE900', 'Claude or an agent asked you something'],
@@ -102,6 +106,15 @@ function runSetup() {
   // later version don't linger as orphaned registrations.
   settings = removeHookEntries(settings)
 
+  // Before 1.3.0 the spinner was pinned to a `sleep 86400` sentinel with a pid
+  // file per tab. The spinner is now pinned to Claude itself; retire those.
+  let killedSentinels = false
+  try { execFileSync('pkill', ['-f', '^wave-alert-busy-'], { stdio: 'ignore' }); killedSentinels = true } catch { /* none running */ }
+  const runDir = join(INSTALL_DIR, 'run')
+  if (existsSync(runDir)) {
+    for (const f of readdirSync(runDir)) if (f.endsWith('.pid')) rmSync(join(runDir, f), { force: true })
+  }
+
   for (const { event, arg, matcher } of EVENTS) {
     settings = addHookEntry(settings, event, `"${INSTALLED_HOOK}" ${arg}`, {
       matcher,
@@ -111,15 +124,63 @@ function runSetup() {
   saveSettings(settingsPath, settings)
   ok(`Settings updated: ${settingsPath}`)
 
+  // Wave clears a dead sentinel's spinner within a second; until then it
+  // would outrank, and so reject, the session indicators set next.
+  if (killedSentinels) execFileSync('/bin/sleep', ['1.5'])
+  if (wsh) {
+    const n = backfillOpenSessions(wsh)
+    if (n > 0) ok(`Session indicator shown on ${n} already-open Claude session${n === 1 ? '' : 's'}`)
+  }
+
   log(`\n  Registered ${EVENTS.length} hook events:`)
   for (const [arg, event, icon, color, meaning] of SCHEME) {
     log(`    • ${event.padEnd(18)} ${icon.padEnd(23)} ${color.padEnd(8)} ${meaning}`)
   }
   log('\n  Alerts sit on the tab and clear when you focus it — Wave does that.')
-  log('  The busy spinner sits on the block and survives focus until the turn ends.')
+  log('  The block shows a session indicator while Claude runs, a spinner while it works.')
   log('  Override any icon or colour with WAVE_ALERT_ICON_* / WAVE_ALERT_COLOR_*.')
   log('\n  Try it:  npx wave-claude-visual-alerts test')
   log('\n  ✅ Setup complete! Restart Claude Code for hooks to take effect.\n')
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Sessions open before setup already fired SessionStart, so they would show
+// nothing until their next turn ends. Find each Claude in a Wave block and
+// give it the indicator now, pinned to its pid. No --clear first: a busy
+// session's spinner outranks the indicator, so Wave keeps the spinner.
+function backfillOpenSessions(wsh) {
+  let pids
+  try {
+    // -a: by default pgrep leaves out its own ancestors, which hides the
+    // session that is running setup.
+    pids = execFileSync('pgrep', ['-a', '-x', 'claude'], { encoding: 'utf-8' }).trim().split('\n').filter(Boolean)
+  } catch {
+    return 0
+  }
+  const comm = (pid) => {
+    try { return execFileSync('ps', ['-o', 'comm=', '-p', pid], { encoding: 'utf-8' }).trim() } catch { return '' }
+  }
+  const ppid = (pid) => {
+    try { return execFileSync('ps', ['-o', 'ppid=', '-p', pid], { encoding: 'utf-8' }).trim() } catch { return '' }
+  }
+  let count = 0
+  for (const pid of pids) {
+    // A claude started by another claude shares its block; pinning to it
+    // would drop the indicator when the child exits.
+    if (comm(ppid(pid)) === 'claude') continue
+    let env
+    try { env = execFileSync('ps', ['eww', '-o', 'command=', '-p', pid], { encoding: 'utf-8' }) } catch { continue }
+    const block = env.match(/\bWAVETERM_BLOCKID=(\S+)/)?.[1]
+    if (!block || !UUID_RE.test(block)) continue
+    try {
+      execFileSync(wsh, ['badge', process.env.WAVE_ALERT_ICON_SESSION || 'asterisk',
+        '--color', process.env.WAVE_ALERT_COLOR_SESSION || '#8E8E93',
+        '--pid', pid, '--priority=-1', '-b', `block:${block}`], { stdio: 'ignore' })
+      count++
+    } catch { /* wsh unreachable from this shell */ }
+  }
+  return count
 }
 
 function runUninstall() {
@@ -296,8 +357,9 @@ Optional (macOS):
 Alerts:
 ${SCHEME.map(([a,e,i,c,m]) => `  ${a.padEnd(9)} ${i.padEnd(23)} ${c.padEnd(8)} ${m}`).join('\n')}
 
-Alerts clear when you focus the tab. The busy spinner persists until the turn
-ends. Override any icon or colour with WAVE_ALERT_ICON_* / WAVE_ALERT_COLOR_*.
+Alerts clear when you focus the tab. While Claude runs, the tab keeps a
+session indicator, or the spinner while it works; both go when Claude exits.
+Override any icon or colour with WAVE_ALERT_ICON_* / WAVE_ALERT_COLOR_*.
 `)
 }
 

@@ -1,6 +1,6 @@
 # wave-claude-visual-alerts
 
-Turns the [Wave Terminal](https://waveterm.dev) tab bar into a live status board for [Claude Code](https://claude.ai/claude-code). At a glance you can see which tabs are working, which are finished, and which are blocked waiting on you.
+Turns the [Wave Terminal](https://waveterm.dev) tab bar into a live status board for [Claude Code](https://claude.ai/claude-code). At a glance you can see which tabs have a Claude session at all, which are working, which are finished, and which are blocked waiting on you.
 
 Built for the case where you have eight or more Wave tabs open and need to know *which one* wants you.
 
@@ -21,6 +21,7 @@ No restart needed — Claude Code hot-reloads `settings.json`.
 
 | | Colour | State | Needs you? |
 |---|---|---|---|
+| ⚪ | Grey `#8E8E93` | session open, idle | no |
 | 🔵 | Blue `#429DFF` | working | no |
 | 🟢 | Green `#58C142` | finished | no |
 | 🩵 | Teal `#00FFDB` | using your mouse and keyboard | no — hands off |
@@ -46,6 +47,7 @@ A working tab should never compete for attention with a blocked one. Only the st
 
 | State | Claude Code event | Icon | Colour | Meaning |
 |---|---|---|---|---|
+| `session` | `SessionStart` (startup, resume, clear), and after every `Stop` / `StopFailure` | `asterisk` | ⚪ `#8E8E93` | A Claude session is open in this tab. Always on until Claude exits |
 | `busy` | `UserPromptSubmit`, `PreToolUse` | `spinner+spin` | 🔵 `#429DFF` | Claude is working |
 | `input` | `PermissionRequest` | `hand+beat` | 🟠 `#FF9500` | Needs a permission decision |
 | `waiting` | `Stop`, `Notification` | `circle-question+fade` | 🟡 `#FFE900` | Claude's last message ends in a question, or a background agent needs your input |
@@ -77,15 +79,31 @@ A working tab should never compete for attention with a blocked one. Only the st
 Wave allows **one badge per object**, so a naive implementation has every state overwrite the last. This uses two objects deliberately:
 
 - **Alerts go on the tab.** Wave ≥ 0.14.2 ships a `BadgeAutoClearing` component that removes a tab badge ~500 ms after you focus that tab (3 s if you were already there). So there are no clear-hooks, no state directory, and no way for a stale alert to stick.
-- **The busy spinner goes on the block**, pinned to a sentinel process via `wsh badge --pid`. Pid-linked badges are explicitly skipped by auto-clear, so the spinner survives you looking at the tab — and reappears as the main icon once a higher-priority alert clears.
+- **The block holds one always-on badge while Claude runs**: the grey session indicator when idle, the blue spinner while working. Both are pinned to Claude's own pid via `wsh badge --pid`. Pid-linked badges are skipped by auto-clear, so they survive you looking at the tab, and Wave removes them itself within a second of Claude exiting, even on a crash.
 
-`busy` fires on **both** `UserPromptSubmit` and `PreToolUse`. The second is necessary because a turn started with a `!` bash command never fires `UserPromptSubmit`, and would otherwise run with no spinner at all. Since `PreToolUse` fires on every tool call, the already-spinning path must be cheap: the sentinel's pid is kept in `~/.wave-alerts/run/<tabid>.pid`, so the check is a file read plus `kill -0` — **3 ms**, against 17 ms for `pgrep` alone. A stale or garbage pid file is ignored and respawned. `Stop`, `StopFailure` and `SessionEnd` kill the sentinel and remove the file, verifying the process is really ours first, since pids get recycled.
+Wave only lets a new badge replace one of lower priority, or of equal priority and older. The spinner (5) outranks the indicator (−1), so going busy is a single set; going idle is a clear, then a set. A pid exit clears by badge id, so it can never wipe a newer badge.
 
-Badges sort by priority, highest first. Alerts are 10 (failures 15); the pid-linked spinner defaults to 5. So an alert takes the 12 px icon slot and the spinner demotes to a 4 px dot beside it, then returns when the alert clears.
+`busy` fires on **both** `UserPromptSubmit` and `PreToolUse`. The second is necessary because a turn started with a `!` bash command never fires `UserPromptSubmit`, and would otherwise run with no spinner at all. Since `PreToolUse` fires on every tool call, the already-spinning path must be cheap: `~/.wave-alerts/run/<blockid>.state` records `busy:<claude pid>`, so the check is one file read against the hook's parent pid, about 4 ms including bash startup.
+
+Badges sort by priority, highest first: failures 15, alerts 10, spinner 5, a manual flag 0, session indicator −1. The top one takes the 12 px icon slot and the next two show as 4 px dots. So an alert shows with the spinner or indicator as a dot beside it, and the block badge returns to the main slot when the alert clears.
+
+**How each state sits with the indicator:**
+
+| While… | Main icon | Dot beside it |
+|---|---|---|
+| idle, nothing pending | ⚪ session | — |
+| working | 🔵 spinner | — |
+| working and blocked (permission, `AskUserQuestion`, MCP, teammate) | 🟠 / 🟣 alert | 🔵 spinner |
+| turn just ended, not yet looked at | 🟢 done / 🟡 question / 🔴 failed | ⚪ session |
+| paused on a usage limit | 🟡 hourglass | ⚪ session |
+| after you focus the tab | ⚪ session | — |
+| Claude exited, or no Claude in this tab | nothing | — |
+
+Sessions that were already open when you run `setup` get the indicator straight away: `setup` finds each running `claude` in a Wave block and pins one to it. A session that is mid-turn keeps its spinner, since the spinner outranks it.
 
 ## Plays Nicely With Manually Flagged Tabs
 
-If you use Wave's **Flag Tab** right-click menu to colour-code tabs, this never disturbs it — it does not write `tab:flagcolor`. Wave merges your manual flag as a synthetic `priority: 0` badge, so alerts outrank it, and it returns to the main slot once they clear.
+If you use Wave's **Flag Tab** right-click menu to colour-code tabs, this never disturbs it — it does not write `tab:flagcolor`. Wave merges your manual flag as a synthetic `priority: 0` badge, so alerts and the spinner outrank it, and it returns to the main slot once they clear. The session indicator sits just *below* the flag (−1), so a flagged tab keeps its flag as the main icon and shows the session as a grey dot beside it.
 
 ## Commands
 
@@ -103,7 +121,7 @@ npx wave-claude-visual-alerts install-open-shim   # Optional, macOS — see belo
 - [Claude Code](https://claude.ai/claude-code) v2.x
 - Node.js 18+
 
-No `jq`. No config file. No state directory.
+No `jq`. No config file.
 
 ## Customization
 
@@ -114,7 +132,7 @@ export WAVE_ALERT_COLOR_BUSY="#8E8E93"      # grey instead of blue
 export WAVE_ALERT_ICON_BUSY="hourglass+spin"
 ```
 
-Pattern is `WAVE_ALERT_COLOR_<STATE>` and `WAVE_ALERT_ICON_<STATE>`, where `<STATE>` is one of `BUSY`, `INPUT`, `WAITING`, `LIMIT`, `MCP`, `COMPUTER`, `DONE`, `FAILED`.
+Pattern is `WAVE_ALERT_COLOR_<STATE>` and `WAVE_ALERT_ICON_<STATE>`, where `<STATE>` is one of `SESSION`, `BUSY`, `INPUT`, `WAITING`, `LIMIT`, `MCP`, `COMPUTER`, `DONE`, `FAILED`.
 
 ### Icons
 
@@ -174,7 +192,7 @@ It installs `~/.wave-alerts/bin/open`, a 30-line shell script shadowing `/usr/bi
 
 ## How It Works
 
-`setup` writes `~/.wave-alerts/hooks/wave-alert-hook.sh` and registers it in `~/.claude/settings.json` for eight events. The state arrives as an **argument**, not parsed from the stdin JSON, which is why the hook needs no `jq`:
+`setup` writes `~/.wave-alerts/hooks/wave-alert-hook.sh` and registers it in `~/.claude/settings.json` for nine events. The state arrives as an **argument**, not parsed from the stdin JSON, which is why the hook needs no `jq`:
 
 ```json
 { "Stop": [{ "hooks": [{ "type": "command",
@@ -187,8 +205,8 @@ The hook reads `WAVETERM_TABID` from the environment and exits silently if unset
 
 - **One badge per tab**, so two Claude sessions sharing a tab share the alert slot and the most recent event wins. Their busy spinners are per-block and don't collide. One session per tab — the usual layout — is unaffected.
 - **No duration threshold.** Claude Code has no "running longer than N minutes" event. `busy` covers the whole turn, however long.
-- **If something external clears the spinner mid-turn** — an over-broad `pkill -f wave-alert-busy` matches every tab, not just one — it returns on the next tool call rather than instantly.
-- **Interrupting a turn with Esc leaves the spinner running.** Claude Code fires no hook event on interrupt, so nothing tells the hook the turn ended. It clears when that session's next turn completes, or via `pkill -f wave-alert-busy-<tabid>`. The obvious fix — clearing it on the next prompt — was tried and reverted; see [DECISIONS.md](DECISIONS.md) before attempting it again.
+- **Interrupting a turn with Esc leaves the spinner running.** Claude Code fires no hook event on interrupt, so nothing tells the hook the turn ended. It turns back into the session indicator when that session's next turn completes, and goes when Claude exits. The obvious fix — clearing it on the next prompt — was tried and reverted; see [DECISIONS.md](DECISIONS.md) before attempting it again.
+- **One indicator per block.** Two Claude sessions in one tab, in separate blocks, each get their own; the tab shows the highest-priority one.
 - **No workflow or `/loop` events.** Workflows surface as `SubagentStart`/`SubagentStop` per agent; `/loop` iterations are ordinary turns.
 
 ## Coexistence
@@ -201,9 +219,9 @@ Run `npx wave-claude-visual-alerts doctor`.
 
 **Nothing appears?** Confirm `echo $WAVETERM_TABID` is non-empty in the Claude Code pane. Hooks inherit the shell environment.
 
-**Spinner stuck after a crash?** `pkill -f wave-alert-busy` clears any orphaned sentinel.
+**Indicator or spinner left after a crash?** It shouldn't be: both are pinned to Claude's pid, and Wave removes them within a second of the process exiting. Wave logs it as `BadgeWatchPidCommand: pid … gone` in `~/Library/Application Support/waveterm/waveapp.log`.
 
-**Spinner disappeared while Claude was still working?** Fixed in 1.0.0. Wave clears badges by object, not by badge id, and does so asynchronously when a watched process exits — so killing the old sentinel raced the new badge and wiped it. `busy` now reuses a live sentinel instead of respawning one.
+**Session indicator missing on an open session?** Run `setup` again; it backfills every running session it can find in a Wave block.
 
 ## License
 
