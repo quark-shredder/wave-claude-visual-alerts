@@ -1,6 +1,6 @@
 # wave-claude-visual-alerts
 
-Turns the [Wave Terminal](https://waveterm.dev) tab bar into a live status board for [Claude Code](https://claude.ai/claude-code). At a glance you can see which tabs have a Claude session at all, which are working, which are finished, and which are blocked waiting on you.
+Turns the [Wave Terminal](https://waveterm.dev) tab bar into a live status board for [Claude Code](https://claude.ai/claude-code). Every tab with a Claude session shows exactly one icon: what that session is doing right now. Tabs with no session show nothing.
 
 Built for the case where you have eight or more Wave tabs open and need to know *which one* wants you.
 
@@ -15,22 +15,23 @@ No restart needed — Claude Code hot-reloads `settings.json`.
 
 ## The Scheme
 
-**Colour carries urgency. Icon and animation carry kind.**
+**One icon per tab, always the current state. Colour carries urgency; icon and animation carry kind.**
 
-**Cool colours need nothing from you. Warm colours escalate.** Six colours, all from Wave's own flag palette, each with exactly one urgency:
+**Cool colours need nothing from you. Warm colours escalate.** Five colours, all from Wave's own flag palette, each with exactly one urgency:
 
 | | Colour | Means | Needs you? |
 |---|---|---|---|
-| 🩵 | Teal `#00FFDB` | a Claude session is live here, idle | no |
+| 🩵 | Teal `#00FFDB` | Claude is live here and idle: ready, or finished | no |
 | 🔵 | Blue `#429DFF` | working (spinner), or driving your mouse and keyboard | no |
-| 🟢 | Green `#58C142` | finished | no |
 | 🟡 | Yellow `#FFE900` | asked you something, or paused on a usage limit | soon |
-| 🟠 | Orange `#FF9500` | blocked on you: permission, MCP input, a teammate | now |
+| 🟠 | Orange `#FF9500` | blocked on you: permission, a question dialog, MCP input, a teammate | now |
 | 🔴 | Red `#FF453A` | failed | now |
 
 No icon means no Claude session in that tab.
 
-Temperature encodes urgency, so you can rank states without remembering what any colour "means": teal → blue → green is *live* → *working* → *done*, and yellow → orange → red is *waiting* → *blocked* → *broken*. When an alert pushes the block badge into a 4 px dot, only its colour shows, which is why a colour never stands for two urgencies. *What* is asking is the icon's job: a hand for a permission, a speech bubble for MCP.
+Temperature encodes urgency: teal → blue is *live* → *working*, and yellow → orange → red is *waiting* → *blocked* → *broken*. *What* is asking is the icon's job: a hand for a permission, a speech bubble for MCP.
+
+**A state holds until the next one replaces it**, not until you look. An unanswered permission stays orange after you glance at the tab; a question stays yellow until you reply.
 
 Animation carries kind rather than urgency:
 
@@ -38,27 +39,24 @@ Animation carries kind rather than urgency:
 |---|---|
 | `+spin` | An ongoing process |
 | `+beat` | Needs you now |
-| `+fade` | Waiting, passive |
+| `+fade` | Waiting, passive (including the idle teal pulse) |
 | *(static)* | Happened, no rush |
-
-A working tab should never compete for attention with a blocked one. Only the states where Claude has stopped and is waiting animate.
 
 ## States
 
-| State | Claude Code event | Icon | Colour | Meaning |
+| State | Set by | Icon | Colour | Held until |
 |---|---|---|---|---|
-| `session` | `SessionStart` (startup, resume, clear), and after every `Stop` / `StopFailure` | `wave-pulse+fade` | 🩵 `#00FFDB` | A Claude session is open in this tab. Always on until Claude exits |
-| `busy` | `UserPromptSubmit`, `PreToolUse` | `spinner+spin` | 🔵 `#429DFF` | Claude is working |
-| `input` | `PermissionRequest` | `hand+beat` | 🟠 `#FF9500` | Needs a permission decision |
-| `waiting` | `Stop`, `Notification` | `circle-question+fade` | 🟡 `#FFE900` | Claude's last message ends in a question, or a background agent needs your input |
-| `limit` | `Notification` | `hourglass-end+fade` | 🟡 `#FFE900` | Usage limit reset or auto-continue stopped; press Enter to continue |
-| `mcp` | `Elicitation` | `message-question+beat` | 🟠 `#FF9500` | An MCP server wants input |
-| `computer` | `Notification` | `computer-mouse` | 🔵 `#429DFF` | Claude is using your mouse and keyboard; cleared when it hands them back |
-| `done` | `Stop` | `circle-check` | 🟢 `#58C142` | Turn finished |
-| `failed` | `StopFailure` | `triangle-exclamation+beat` | 🔴 `#FF453A` | Turn died on an API error |
-| `end` | `SessionEnd` | — | — | Session over; clears everything |
+| `session` | `SessionStart` (startup, resume, clear); `Stop` | `wave-pulse+fade` | 🩵 `#00FFDB` | the next prompt |
+| `busy` | `UserPromptSubmit`, `PreToolUse`, and whatever resolves a wait (below) | `spinner+spin` | 🔵 `#429DFF` | the turn ends or needs you |
+| `input` | `PermissionRequest` (also `AskUserQuestion`) | `hand+beat` | 🟠 `#FF9500` | answered: `PostToolUse` / `PostToolUseFailure` |
+| `mcp` | `Elicitation` | `message-question+beat` | 🟠 `#FF9500` | answered: `ElicitationResult` |
+| `waiting` | `Stop` when Claude's last message ends in `?`; a background agent needs input | `circle-question+fade` | 🟡 `#FFE900` | you reply |
+| `limit` | usage limit reset, or auto-continue stopped | `hourglass-end+fade` | 🟡 `#FFE900` | Claude resumes, or you press Enter |
+| `computer` | Claude takes your mouse and keyboard | `computer-mouse` | 🔵 `#429DFF` | it hands them back |
+| `failed` | `StopFailure` | `triangle-exclamation+beat` | 🔴 `#FF453A` | the next prompt |
+| `end` | `SessionEnd` | — | — | clears everything |
 
-`Stop` shows yellow instead of green when Claude's last message ends in `?`. Claude Code passes that message to the hook as `last_assistant_message`, and the hook reads it with `sed`, not `jq`.
+The question check reads `last_assistant_message`, which Claude Code passes to the `Stop` hook, with `sed`, not `jq`.
 
 `Notification` is registered once, for these types only, and the hook routes each by its `notification_type`:
 
@@ -68,42 +66,27 @@ A working tab should never compete for attention with a blocked one. Only the st
 | `worker_permission_prompt` (a teammate needs permission) | `input` |
 | `quota_auto_resume_stale`, `quota_auto_resume_disabled` | `limit` |
 | `quota_auto_resume_fired` (Claude resumes by itself) | `busy` |
-| `computer_use_enter` / `computer_use_exit` | `computer` on / cleared |
+| `computer_use_enter` / `computer_use_exit` | `computer` / back to `busy` |
 
-`idle_prompt` is deliberately left out: it fires 60 seconds after *every* finished turn you haven't answered, so it turned each unvisited green tab yellow. `AskUserQuestion` needs nothing extra: it fires `PermissionRequest`, so it already shows `input`. See the [decision log](DECISIONS.md).
+`idle_prompt` is deliberately left out: it fires 60 seconds after *every* finished turn. See the [decision log](DECISIONS.md).
 
-**`SubagentStop` is deliberately not used.** A subagent finishing means the main turn is still running, which `busy` already covers. Worse, its badge would outrank the spinner and leave an inactive tab showing "a subagent finished" while it is actually still working.
+**`SubagentStop` is deliberately not used.** A subagent finishing means the main turn is still running, which `busy` already covers.
 
-## Why Two Objects
+## Why One Badge
 
-Wave allows **one badge per object**, so a naive implementation has every state overwrite the last. This uses two objects deliberately:
+Wave draws a tab's highest-priority badge as its 12 px icon and the next two as 4 px dots beside it, and has no setting to hide the dots. So any second badge on a tab shows up as a dot. Here, each Claude session owns exactly one badge, on its **block**, and every state replaces it.
 
-- **Alerts go on the tab.** Wave ≥ 0.14.2 ships a `BadgeAutoClearing` component that removes a tab badge ~500 ms after you focus that tab (3 s if you were already there). So there are no clear-hooks, no state directory, and no way for a stale alert to stick.
-- **The block holds one always-on badge while Claude runs**: the pulsing teal session indicator when idle, the blue spinner while working. Both are pinned to Claude's own pid via `wsh badge --pid`. Pid-linked badges are skipped by auto-clear, so they survive you looking at the tab, and Wave removes them itself within a second of Claude exiting, even on a crash.
+That badge is pinned to Claude's own pid with `wsh badge --pid`. Pinned badges are skipped by Wave's clear-on-focus, which is what lets a state hold until it is resolved, and Wave removes the badge by itself within a second of Claude exiting, even on a crash.
 
-Wave only lets a new badge replace one of lower priority, or of equal priority and older. The spinner (5) outranks the indicator (−1), so going busy is a single set; going idle is a clear, then a set. A pid exit clears by badge id, so it can never wipe a newer badge.
+Wave only lets a new badge replace one of lower priority, or of equal priority and older. Every active state is priority 5, so the newest simply wins. The idle pulse is −1, so going idle is a clear, then a set. A pid exit clears by badge id, so it can never wipe a newer badge.
 
-`busy` fires on **both** `UserPromptSubmit` and `PreToolUse`. The second is necessary because a turn started with a `!` bash command never fires `UserPromptSubmit`, and would otherwise run with no spinner at all. Since `PreToolUse` fires on every tool call, the already-spinning path must be cheap: `~/.wave-alerts/run/<blockid>.state` records `busy:<claude pid>`, so the check is one file read against the hook's parent pid, about 4 ms including bash startup.
+`busy` fires on `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure` and `ElicitationResult`. `PreToolUse` is needed because a turn started with a `!` bash command never fires `UserPromptSubmit`; the others end a wait. They fire on every tool call, so the already-spinning path must be cheap: `~/.wave-alerts/run/<blockid>.state` records the state and Claude's pid, so the check is one file read, about 4 ms including bash startup.
 
-Badges sort by priority, highest first: failures 15, alerts 10, spinner 5, a manual flag 0, session indicator −1. The top one takes the 12 px icon slot and the next two show as 4 px dots. So an alert shows with the spinner or indicator as a dot beside it, and the block badge returns to the main slot when the alert clears.
-
-**How each state sits with the indicator:**
-
-| While… | Main icon | Dot beside it |
-|---|---|---|
-| idle, nothing pending | 🩵 session | — |
-| working | 🔵 spinner | — |
-| working and blocked (permission, `AskUserQuestion`, MCP, teammate) | 🟠 alert | 🔵 spinner |
-| turn just ended, not yet looked at | 🟢 done / 🟡 question / 🔴 failed | 🩵 session |
-| paused on a usage limit | 🟡 hourglass | 🩵 session |
-| after you focus the tab | 🩵 session | — |
-| Claude exited, or no Claude in this tab | nothing | — |
-
-Sessions that were already open when you run `setup` get the indicator straight away: `setup` finds each running `claude` in a Wave block and pins one to it. A session that is mid-turn keeps its spinner, since the spinner outranks it.
+Sessions that were already open when you run `setup` get the idle pulse straight away: `setup` finds each running `claude` in a Wave block and pins one to it. A session that is mid-turn keeps its spinner, since the spinner outranks it.
 
 ## Plays Nicely With Manually Flagged Tabs
 
-If you use Wave's **Flag Tab** right-click menu to colour-code tabs, this never disturbs it — it does not write `tab:flagcolor`. Wave merges your manual flag as a synthetic `priority: 0` badge, so alerts and the spinner outrank it, and it returns to the main slot once they clear. The session indicator sits just *below* the flag (−1), so a flagged tab keeps its flag as the main icon and shows the session as a teal dot beside it.
+If you use Wave's **Flag Tab** right-click menu to colour-code tabs, this never disturbs it — it does not write `tab:flagcolor`. Wave merges your manual flag as a synthetic `priority: 0` badge. Active states outrank it; the idle pulse sits just below it, so an idle flagged tab keeps its flag as the icon. A flagged tab is the one case with two badges, so it does show a dot: the flag's or the session's.
 
 ## Commands
 
@@ -117,7 +100,7 @@ npx wave-claude-visual-alerts install-open-shim   # Optional, macOS — see belo
 
 ## Requirements
 
-- [Wave Terminal](https://waveterm.dev) **v0.14.2+** (needs badge auto-clearing)
+- [Wave Terminal](https://waveterm.dev) **v0.14.2+** (needs pid-linked badges)
 - [Claude Code](https://claude.ai/claude-code) v2.x
 - Node.js 18+
 
@@ -132,7 +115,7 @@ export WAVE_ALERT_COLOR_BUSY="#8E8E93"      # grey instead of blue
 export WAVE_ALERT_ICON_BUSY="hourglass+spin"
 ```
 
-Pattern is `WAVE_ALERT_COLOR_<STATE>` and `WAVE_ALERT_ICON_<STATE>`, where `<STATE>` is one of `SESSION`, `BUSY`, `INPUT`, `WAITING`, `LIMIT`, `MCP`, `COMPUTER`, `DONE`, `FAILED`.
+Pattern is `WAVE_ALERT_COLOR_<STATE>` and `WAVE_ALERT_ICON_<STATE>`, where `<STATE>` is one of `SESSION`, `BUSY`, `INPUT`, `WAITING`, `LIMIT`, `MCP`, `COMPUTER`, `FAILED`.
 
 ### Icons
 
@@ -165,7 +148,7 @@ Useful ones for alerts:
 | `regular@bell` | Sharp Regular — lighter outline |
 | `brands@github` | Brand logos |
 
-**Animation suffixes.** Append `+beat` (pulses size), `+fade` (pulses opacity), or `+spin` (rotates). All three verified working as tab badges.
+**Animation suffixes.** Append `+beat` (pulses size), `+fade` (pulses opacity), or `+spin` (rotates). Wave accepts only these three; other Font Awesome animations are dropped.
 
 > **Gotcha:** an unrecognised icon name is accepted silently and renders as an
 > **empty badge** — nothing validates it. If a badge vanishes after you change
@@ -173,7 +156,7 @@ Useful ones for alerts:
 
 ### Colours
 
-Any hex (`#RRGGBB`, `#RRGGBBAA`) or CSS colour name. The defaults come from Wave's own flag palette: green `#58C142`, teal `#00FFDB`, blue `#429DFF`, red `#FF453A`, orange `#FF9500`, yellow `#FFE900`. Its seventh, purple `#BF55EC`, is left unused, free for your own flags.
+Any hex (`#RRGGBB`, `#RRGGBBAA`) or CSS colour name. The defaults come from Wave's own flag palette: teal `#00FFDB`, blue `#429DFF`, yellow `#FFE900`, orange `#FF9500`, red `#FF453A`. Its other two, green `#58C142` and purple `#BF55EC`, are left free for your own flags.
 
 ## Optional: `open` URLs in the right Chrome profile (macOS)
 
@@ -192,21 +175,22 @@ It installs `~/.wave-alerts/bin/open`, a 30-line shell script shadowing `/usr/bi
 
 ## How It Works
 
-`setup` writes `~/.wave-alerts/hooks/wave-alert-hook.sh` and registers it in `~/.claude/settings.json` for nine events. The state arrives as an **argument**, not parsed from the stdin JSON, which is why the hook needs no `jq`:
+`setup` writes `~/.wave-alerts/hooks/wave-alert-hook.sh` and registers it in `~/.claude/settings.json` for twelve events. The state arrives as an **argument**, not parsed from the stdin JSON, which is why the hook needs no `jq`:
 
 ```json
 { "Stop": [{ "hooks": [{ "type": "command",
     "command": "~/.wave-alerts/hooks/wave-alert-hook.sh done", "timeout": 3 }] }] }
 ```
 
-The hook reads `WAVETERM_TABID` from the environment and exits silently if unset, so it is harmless outside Wave.
+The hook reads `WAVETERM_TABID` and `WAVETERM_BLOCKID` from the environment and exits silently if either is unset, so it is harmless outside Wave.
 
 ### Known limitations
 
-- **One badge per tab**, so two Claude sessions sharing a tab share the alert slot and the most recent event wins. Their busy spinners are per-block and don't collide. One session per tab — the usual layout — is unaffected.
 - **No duration threshold.** Claude Code has no "running longer than N minutes" event. `busy` covers the whole turn, however long.
-- **Interrupting a turn with Esc leaves the spinner running.** Claude Code fires no hook event on interrupt, so nothing tells the hook the turn ended. It turns back into the session indicator when that session's next turn completes, and goes when Claude exits. The obvious fix — clearing it on the next prompt — was tried and reverted; see [DECISIONS.md](DECISIONS.md) before attempting it again.
-- **One indicator per block.** Two Claude sessions in one tab, in separate blocks, each get their own; the tab shows the highest-priority one.
+- **Interrupting a turn with Esc leaves the spinner running.** Claude Code fires no hook event on interrupt, so nothing tells the hook the turn ended. It turns back into the idle pulse when that session's next turn completes, and goes when Claude exits. The obvious fix — clearing it on the next prompt — was tried and reverted; see [DECISIONS.md](DECISIONS.md) before attempting it again.
+- **No "finished, not looked at yet".** A finished turn goes straight to the idle pulse. That signal needed a badge that clears on focus alongside the persistent one, which Wave draws as a dot.
+- **Two Claude sessions in one tab**, in separate blocks, each keep their own badge; the tab shows the higher-priority one as the icon and the other as a dot.
+- **Denying a permission is untested.** If Claude Code fires no hook on the denial, the orange hand stays until Claude's next step or your next prompt.
 - **No workflow or `/loop` events.** Workflows surface as `SubagentStart`/`SubagentStop` per agent; `/loop` iterations are ordinary turns.
 
 ## Coexistence
@@ -219,9 +203,9 @@ Run `npx wave-claude-visual-alerts doctor`.
 
 **Nothing appears?** Confirm `echo $WAVETERM_TABID` is non-empty in the Claude Code pane. Hooks inherit the shell environment.
 
-**Indicator or spinner left after a crash?** It shouldn't be: both are pinned to Claude's pid, and Wave removes them within a second of the process exiting. Wave logs it as `BadgeWatchPidCommand: pid … gone` in `~/Library/Application Support/waveterm/waveapp.log`.
+**Icon left after a crash?** It shouldn't be: it is pinned to Claude's pid, and Wave removes them within a second of the process exiting. Wave logs it as `BadgeWatchPidCommand: pid … gone` in `~/Library/Application Support/waveterm/waveapp.log`.
 
-**Session indicator missing on an open session?** Run `setup` again; it backfills every running session it can find in a Wave block.
+**No icon on an open session?** Run `setup` again; it backfills every running session it can find in a Wave block.
 
 ## License
 

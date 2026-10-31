@@ -40,26 +40,30 @@ const EVENTS = [
   // PreToolUse arms the spinner too. It exits in ~5ms when already spinning.
   { event: 'PreToolUse', arg: 'busy', matcher: '*' },
   { event: 'PermissionRequest', arg: 'input', matcher: '*' },
+  // A waiting state holds until resolved. These end one: a permission or
+  // AskUserQuestion answered, MCP input given. Same hot path as PreToolUse.
+  { event: 'PostToolUse', arg: 'busy', matcher: '*' },
+  { event: 'PostToolUseFailure', arg: 'busy', matcher: '*' },
   // One registration for every Notification type we show; the hook reads
   // notification_type from stdin and routes it. idle_prompt is left out on
   // purpose — it fires after every unanswered turn. See DECISIONS.md.
   { event: 'Notification', arg: 'notify', matcher: 'agent_needs_input|worker_permission_prompt|quota_auto_resume_fired|quota_auto_resume_stale|quota_auto_resume_disabled|computer_use_enter|computer_use_exit' },
   { event: 'Elicitation', arg: 'mcp', matcher: '*' },
+  { event: 'ElicitationResult', arg: 'busy', matcher: '*' },
   { event: 'Stop', arg: 'done' },
   { event: 'StopFailure', arg: 'failed', matcher: '*' },
   { event: 'SessionEnd', arg: 'end', matcher: '*' },
 ]
 
-// Colour carries urgency, animation carries kind. See README.
+// Colour carries urgency, icon and animation carry kind. See README.
 const SCHEME = [
-  ['session',  'SessionStart/Stop', 'wave-pulse+fade',       '#00FFDB', 'Claude session open, idle'],
+  ['session',  'SessionStart/Stop', 'wave-pulse+fade',       '#00FFDB', 'Claude session live, idle or finished'],
   ['busy',     'UserPromptSubmit/PreToolUse', 'spinner+spin',   '#429DFF', 'working, no action'],
   ['input',    'PermissionRequest', 'hand+beat',             '#FF9500', 'needs a permission decision'],
   ['waiting',  'Stop/Notification', 'circle-question+fade',  '#FFE900', 'Claude or an agent asked you something'],
   ['limit',    'Notification',      'hourglass-end+fade',    '#FFE900', 'usage limit: press Enter to continue'],
   ['mcp',      'Elicitation',       'message-question+beat', '#FF9500', 'an MCP server wants input'],
   ['computer', 'Notification',      'computer-mouse',        '#429DFF', 'Claude is using your mouse and keyboard'],
-  ['done',     'Stop',              'circle-check',          '#58C142', 'turn finished'],
   ['failed',   'StopFailure',       'triangle-exclamation+beat', '#FF453A', 'turn died on an API error'],
   ['end',      'SessionEnd',        '(clears everything)',   '-',       'session over'],
 ]
@@ -136,8 +140,8 @@ function runSetup() {
   for (const [arg, event, icon, color, meaning] of SCHEME) {
     log(`    • ${event.padEnd(18)} ${icon.padEnd(23)} ${color.padEnd(8)} ${meaning}`)
   }
-  log('\n  Alerts sit on the tab and clear when you focus it — Wave does that.')
-  log('  The block shows a session indicator while Claude runs, a spinner while it works.')
+  log('\n  Each live tab shows one icon: its current state, held until the next one.')
+  log('  Tabs with no Claude session show nothing.')
   log('  Override any icon or colour with WAVE_ALERT_ICON_* / WAVE_ALERT_COLOR_*.')
   log('\n  Try it:  npx wave-claude-visual-alerts test')
   log('\n  ✅ Setup complete! Restart Claude Code for hooks to take effect.\n')
@@ -173,6 +177,11 @@ function backfillOpenSessions(wsh) {
     try { env = execFileSync('ps', ['eww', '-o', 'command=', '-p', pid], { encoding: 'utf-8' }) } catch { continue }
     const block = env.match(/\bWAVETERM_BLOCKID=(\S+)/)?.[1]
     if (!block || !UUID_RE.test(block)) continue
+    // Before 1.4.0 alerts sat on the tab as a second badge, drawn as a dot.
+    const tab = env.match(/\bWAVETERM_TABID=(\S+)/)?.[1]
+    if (tab && UUID_RE.test(tab)) {
+      try { execFileSync(wsh, ['badge', '--clear', '-b', `tab:${tab}`], { stdio: 'ignore' }) } catch { /* ignore */ }
+    }
     try {
       execFileSync(wsh, ['badge', process.env.WAVE_ALERT_ICON_SESSION || 'wave-pulse+fade',
         '--color', process.env.WAVE_ALERT_COLOR_SESSION || '#00FFDB',
@@ -357,8 +366,8 @@ Optional (macOS):
 Alerts:
 ${SCHEME.map(([a,e,i,c,m]) => `  ${a.padEnd(9)} ${i.padEnd(23)} ${c.padEnd(8)} ${m}`).join('\n')}
 
-Alerts clear when you focus the tab. While Claude runs, the tab keeps a
-session indicator, or the spinner while it works; both go when Claude exits.
+Each live tab shows one icon, its current state, held until the state changes
+rather than cleared when you look. It goes when Claude exits.
 Override any icon or colour with WAVE_ALERT_ICON_* / WAVE_ALERT_COLOR_*.
 `)
 }

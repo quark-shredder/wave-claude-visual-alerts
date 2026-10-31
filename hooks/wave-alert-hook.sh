@@ -6,38 +6,37 @@
 # see whether Claude's last message asks you something, and `notify`, which
 # routes a Notification to a state by its type.
 #
-#   session   wave-pulse           teal    a Claude session is open here, idle
+#   session   wave-pulse           teal    a Claude session is live here, idle
 #   busy      spinner              blue    working, no action needed
 #   input     hand                 orange  needs a permission decision
 #   waiting   circle-question      yellow  Claude or an agent asked you something
 #   limit     hourglass-end        yellow  usage limit: press Enter to continue
 #   mcp       message-question     orange  an MCP server wants input
 #   computer  computer-mouse       blue    Claude is using your mouse and keyboard
-#   done      circle-check         green   turn finished
+#   done      -> session, or -> waiting if the last message ends in "?"
 #   failed    triangle-exclamation red     turn died on an API error
 #   end       -                    -       session over: clean up
 #
-# Two objects, deliberately:
+# One badge, always the current state. Wave draws a tab's top badge as its
+# icon and the next two as 4 px dots, with no way to turn the dots off, so a
+# second badge always means a dot. Everything therefore goes on the BLOCK, in
+# one badge pinned to Claude's own pid with --pid. Pinned badges are skipped
+# by Wave's clear-on-focus, so a state holds until the next state replaces
+# it: an unanswered permission stays up even after you look at the tab. Wave
+# removes the badge itself within a second of Claude exiting, even on a crash.
 #
-#   Alerts go on the TAB. Wave clears them itself when you focus the tab
-#   (its BadgeAutoClearing component). The one alert cleared here is
-#   `computer`, when Claude hands your mouse and keyboard back.
+# Wave only lets a badge replace one of lower priority, or of equal priority
+# and older. Every active state is 5, so the newest simply wins. The idle
+# indicator is -1, just under a manual flag's 0, so going idle is a clear then
+# a set. A pid exit clears by badge id, so it never wipes a newer badge.
 #
-#   The BLOCK holds one always-on badge for as long as Claude runs: the
-#   session indicator when idle, the spinner while working. Both are pinned
-#   to Claude's own pid with --pid, which makes Wave's auto-clear skip them,
-#   and makes Wave remove them itself within a second of Claude exiting, even
-#   on a crash. They reappear as the main icon once a tab alert clears.
-#
-#   Wave only lets a badge replace one of lower priority, or of equal priority
-#   and older. The spinner (5) outranks the session indicator (-1, just under
-#   a manual flag's 0), so going busy is one set, and going idle is a clear
-#   then a set. A pid exit clears by badge id, so it never wipes a newer badge.
-#
-#   `busy` fires on both UserPromptSubmit and PreToolUse, because a turn
-#   started with a `!` bash command never fires UserPromptSubmit. PreToolUse
-#   fires on every tool call, so the already-spinning check is one read of
-#   ~/.wave-alerts/run/<blockid>.state, compared against the hook's parent pid.
+# A waiting state ends on the event that resolves it, all mapped to `busy`:
+# PostToolUse/PostToolUseFailure after a permission or AskUserQuestion is
+# answered, ElicitationResult after MCP input, UserPromptSubmit after you
+# reply. `busy` also fires on every PreToolUse, because a turn started with a
+# `!` bash command never fires UserPromptSubmit. So the already-spinning
+# check is the hot path: one read of ~/.wave-alerts/run/<blockid>.state,
+# compared against the hook's parent pid.
 #
 # Every colour and icon is overridable; see the table in the README.
 #
@@ -66,13 +65,10 @@ WSH="$HOME/Library/Application Support/waveterm/bin/wsh"
 
 TAB="tab:$WAVETERM_TABID"
 RUNDIR="$HOME/.wave-alerts/run"
-# The block badge needs the block id; without it, only tab alerts are shown.
-BLOCK=""
-STATEFILE=""
-if is_uuid "$WAVETERM_BLOCKID"; then
-  BLOCK="block:$WAVETERM_BLOCKID"
-  STATEFILE="$RUNDIR/$WAVETERM_BLOCKID.state"
-fi
+# The badge lives on the block, so no block id means nothing to show.
+is_uuid "$WAVETERM_BLOCKID" || exit 0
+BLOCK="block:$WAVETERM_BLOCKID"
+STATEFILE="$RUNDIR/$WAVETERM_BLOCKID.state"
 
 # Claude Code runs this hook as its direct child, so $PPID is Claude. If a
 # shell sits in between, step past it.
@@ -84,23 +80,18 @@ claude_pid() {
   echo "$p"
 }
 
-# block_badge <state> <icon> <color> <priority>  — pinned to Claude's pid
-block_badge() {
-  "$WSH" badge "$2" --color "$3" --pid "$(claude_pid)" --priority="$4" -b "$BLOCK" >/dev/null 2>&1
+# show <state> <icon> <color> [priority]  — the block's one badge, pinned to
+# Claude's pid. Priority 5 for every active state, so the newest wins.
+show() {
+  "$WSH" badge "$2" --color "$3" --pid "$(claude_pid)" --priority="${4:-5}" -b "$BLOCK" >/dev/null 2>&1
   mkdir -p "$RUNDIR" 2>/dev/null
   echo "$1:$PPID" > "$STATEFILE" 2>/dev/null
 }
 
-# The always-on indicator. Clear first: the spinner outranks it.
+# The idle indicator. Clear first: every active state outranks it.
 show_session() {
-  [ -n "$BLOCK" ] || return 0
   "$WSH" badge --clear -b "$BLOCK" >/dev/null 2>&1
-  block_badge idle "${WAVE_ALERT_ICON_SESSION:-wave-pulse+fade}" "${WAVE_ALERT_COLOR_SESSION:-#00FFDB}" -1
-}
-
-# alert <icon> <color> [priority]  — on the tab, cleared by Wave on focus
-alert() {
-  "$WSH" badge "$1" --color "$2" --priority "${3:-10}" -b "$TAB" >/dev/null 2>&1
+  show idle "${WAVE_ALERT_ICON_SESSION:-wave-pulse+fade}" "${WAVE_ALERT_COLOR_SESSION:-#00FFDB}" -1
 }
 
 # Does Claude's last message, in the Stop JSON on stdin, end in a question?
@@ -132,9 +123,7 @@ if [ "$state" = notify ]; then
     quota_auto_resume_fired)    state=busy ;;
     quota_auto_resume_stale|quota_auto_resume_disabled) state=limit ;;
     computer_use_enter)         state=computer ;;
-    computer_use_exit)
-      "$WSH" badge --clear -b "$TAB" >/dev/null 2>&1
-      exit 0 ;;
+    computer_use_exit)          state=busy ;;
     *) exit 0 ;;
   esac
 fi
@@ -144,42 +133,40 @@ case "$state" in
     show_session
     ;;
   busy)
-    [ -n "$BLOCK" ] || exit 0
     # Already spinning for this Claude: the hot path, one file read.
     read -r s 2>/dev/null < "$STATEFILE"
     [ "$s" = "busy:$PPID" ] && exit 0
-    block_badge busy "${WAVE_ALERT_ICON_BUSY:-spinner+spin}" "${WAVE_ALERT_COLOR_BUSY:-#429DFF}" 5
+    show busy "${WAVE_ALERT_ICON_BUSY:-spinner+spin}" "${WAVE_ALERT_COLOR_BUSY:-#429DFF}"
     ;;
   input)
-    alert "${WAVE_ALERT_ICON_INPUT:-hand+beat}" "${WAVE_ALERT_COLOR_INPUT:-#FF9500}"
+    show input "${WAVE_ALERT_ICON_INPUT:-hand+beat}" "${WAVE_ALERT_COLOR_INPUT:-#FF9500}"
     ;;
   waiting)
-    alert "${WAVE_ALERT_ICON_WAITING:-circle-question+fade}" "${WAVE_ALERT_COLOR_WAITING:-#FFE900}"
+    show waiting "${WAVE_ALERT_ICON_WAITING:-circle-question+fade}" "${WAVE_ALERT_COLOR_WAITING:-#FFE900}"
     ;;
   limit)
-    alert "${WAVE_ALERT_ICON_LIMIT:-hourglass-end+fade}" "${WAVE_ALERT_COLOR_LIMIT:-#FFE900}"
+    show limit "${WAVE_ALERT_ICON_LIMIT:-hourglass-end+fade}" "${WAVE_ALERT_COLOR_LIMIT:-#FFE900}"
     ;;
   mcp)
-    alert "${WAVE_ALERT_ICON_MCP:-message-question+beat}" "${WAVE_ALERT_COLOR_MCP:-#FF9500}"
+    show mcp "${WAVE_ALERT_ICON_MCP:-message-question+beat}" "${WAVE_ALERT_COLOR_MCP:-#FF9500}"
     ;;
   computer)
-    alert "${WAVE_ALERT_ICON_COMPUTER:-computer-mouse}" "${WAVE_ALERT_COLOR_COMPUTER:-#429DFF}"
+    show computer "${WAVE_ALERT_ICON_COMPUTER:-computer-mouse}" "${WAVE_ALERT_COLOR_COMPUTER:-#429DFF}"
     ;;
   done)
-    show_session
     if asked_question; then
-      alert "${WAVE_ALERT_ICON_WAITING:-circle-question+fade}" "${WAVE_ALERT_COLOR_WAITING:-#FFE900}"
+      show waiting "${WAVE_ALERT_ICON_WAITING:-circle-question+fade}" "${WAVE_ALERT_COLOR_WAITING:-#FFE900}"
     else
-      alert "${WAVE_ALERT_ICON_DONE:-circle-check}" "${WAVE_ALERT_COLOR_DONE:-#58C142}"
+      show_session
     fi
     ;;
   failed)
-    show_session
-    alert "${WAVE_ALERT_ICON_FAILED:-triangle-exclamation+beat}" "${WAVE_ALERT_COLOR_FAILED:-#FF453A}" 15
+    show failed "${WAVE_ALERT_ICON_FAILED:-triangle-exclamation+beat}" "${WAVE_ALERT_COLOR_FAILED:-#FF453A}"
     ;;
   end)
-    [ -n "$BLOCK" ] && "$WSH" badge --clear -b "$BLOCK" >/dev/null 2>&1
-    [ -n "$STATEFILE" ] && rm -f "$STATEFILE" 2>/dev/null
+    "$WSH" badge --clear -b "$BLOCK" >/dev/null 2>&1
+    rm -f "$STATEFILE" 2>/dev/null
+    # Tab alerts from versions before 1.4.0, if any are still up.
     "$WSH" badge --clear -b "$TAB" >/dev/null 2>&1
     ;;
 esac

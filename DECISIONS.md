@@ -5,6 +5,62 @@ and rejected. Newest first.
 
 ---
 
+## 2026-10-31 — One badge per session, always the current state; tab alerts dropped
+
+**Status:** shipped in 1.4.0. Supersedes the "alerts on the tab" half of the
+two-object design.
+
+### The problem
+
+After 1.3.0 every live session kept a badge on its block, so any alert on
+the tab made two badges. Wave 0.14.5 draws the second as a 4 px dot
+(`TabBadges`: `allBadges.slice(1, 3)`), with no setting to hide it. The user
+saw a dot beside every green check and asked for icons only.
+
+### Why there was no way to keep both
+
+A badge that clears when you look must be unpinned; the live indicator must
+be pinned to survive looking. Two behaviours, two badges, one dot. Nothing
+can restore the indicator after a focus-clear either: no hook fires on
+focus, and `wsh` exposes no focused-tab state (checked `workspace list`,
+`blocks list`, `getmeta`).
+
+### Options put to the user
+
+1. One icon = current state, held until replaced. Chosen.
+2. Keep alerts that clear on focus, and accept the dots.
+3. Drop only the green check, keeping dots beside urgent alerts.
+
+### Design
+
+Every state is a pinned badge on the block. Active states all share priority
+5, so the newest wins with a single set; idle is −1 (below a flag), so it
+needs a clear first. Waits end on the event that resolves them, mapped to
+`busy`: `PostToolUse` / `PostToolUseFailure` (permission or
+`AskUserQuestion` answered), `ElicitationResult` (MCP input given),
+`UserPromptSubmit` (you replied). `computer_use_exit` returns to `busy`.
+`Stop` goes to the idle pulse, or to yellow if the message ends in `?`.
+Green is no longer used.
+
+### Consequences accepted
+
+- **No "finished, not looked at yet".** That was the green check's whole job.
+- **Waits no longer vanish when glanced at.** Under the old design, looking
+  at a tab cleared an orange hand you had not answered. Now it holds.
+- **Flagged tabs still show a dot.** The flag is a second badge by nature.
+- Denying a permission is untested; if no hook fires on it, the hand holds
+  until Claude's next step or your next prompt.
+
+### Verified, Wave 0.14.5, Claude Code 2.1.303
+
+19-step state flow against a fake `wsh`: one block badge per change, no tab
+badge. A real interactive session on made-up ids, read from `waveapp.log`:
+idle → spinner → orange hand while an `AskUserQuestion` sat unanswered for
+57 seconds → spinner once answered → idle → cleared on exit. Every
+equal-priority swap was accepted.
+
+---
+
 ## 2026-10-19 — Always-on session indicator; block badges pinned to Claude, not a sentinel
 
 **Status:** shipped in 1.3.0.
