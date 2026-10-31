@@ -6,14 +6,14 @@
 # see whether Claude's last message asks you something, and `notify`, which
 # routes a Notification to a state by its type.
 #
-#   session   wave-pulse           teal    a Claude session is live here, idle
+#   session   wave-pulse           teal    a Claude session is live here, not yet used
 #   busy      spinner              blue    working, no action needed
 #   input     hand                 orange  needs a permission decision
 #   waiting   circle-question      yellow  Claude or an agent asked you something
 #   limit     hourglass-end        yellow  usage limit: press Enter to continue
 #   mcp       message-question     orange  an MCP server wants input
 #   computer  computer-mouse       blue    Claude is using your mouse and keyboard
-#   done      -> session, or -> waiting if the last message ends in "?"
+#   done      circle-check         green   turn finished (waiting, if it ends in "?")
 #   failed    triangle-exclamation red     turn died on an API error
 #   end       -                    -       session over: clean up
 #
@@ -26,9 +26,9 @@
 # removes the badge itself within a second of Claude exiting, even on a crash.
 #
 # Wave only lets a badge replace one of lower priority, or of equal priority
-# and older. Every active state is 5, so the newest simply wins. The idle
-# indicator is -1, just under a manual flag's 0, so going idle is a clear then
-# a set. A pid exit clears by badge id, so it never wipes a newer badge.
+# and older. Every active state is 5, so the newest simply wins. The two
+# idle states, session and done, are -1, just under a manual flag's 0, so
+# going idle is a clear then a set. A pid exit clears by badge id, so it never wipes a newer badge.
 #
 # A waiting state ends on the event that resolves it, all mapped to `busy`:
 # PostToolUse/PostToolUseFailure after a permission or AskUserQuestion is
@@ -88,10 +88,10 @@ show() {
   echo "$1:$PPID" > "$STATEFILE" 2>/dev/null
 }
 
-# The idle indicator. Clear first: every active state outranks it.
-show_session() {
+# show_idle <state> <icon> <color>  — below every active state, so clear first.
+show_idle() {
   "$WSH" badge --clear -b "$BLOCK" >/dev/null 2>&1
-  show idle "${WAVE_ALERT_ICON_SESSION:-wave-pulse+fade}" "${WAVE_ALERT_COLOR_SESSION:-#00FFDB}" -1
+  show "$1" "$2" "$3" -1
 }
 
 # Does Claude's last message, in the Stop JSON on stdin, end in a question?
@@ -130,7 +130,7 @@ fi
 
 case "$state" in
   session)
-    show_session
+    show_idle idle "${WAVE_ALERT_ICON_SESSION:-wave-pulse+fade}" "${WAVE_ALERT_COLOR_SESSION:-#00FFDB}"
     ;;
   busy)
     # Already spinning for this Claude: the hot path, one file read.
@@ -157,7 +157,7 @@ case "$state" in
     if asked_question; then
       show waiting "${WAVE_ALERT_ICON_WAITING:-circle-question+fade}" "${WAVE_ALERT_COLOR_WAITING:-#FFE900}"
     else
-      show_session
+      show_idle done "${WAVE_ALERT_ICON_DONE:-circle-check}" "${WAVE_ALERT_COLOR_DONE:-#58C142}"
     fi
     ;;
   failed)

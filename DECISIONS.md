@@ -5,6 +5,20 @@ and rejected. Newest first.
 
 ---
 
+## 2026-10-31 — The green check returns, as the one badge
+
+**Status:** shipped in 1.4.1.
+
+1.4.0 sent a finished turn to the teal pulse, losing the check. The user
+asked for the check back without the dot. A finished turn now replaces the
+block's badge with `circle-check` in green at priority −1, like the pulse, so
+it is still one badge and no dot. It holds until the next prompt rather than
+clearing on focus. The teal pulse now only marks a session not used yet:
+started, resumed or cleared. Verified in `waveapp.log` with a real session:
+pulse → spinner → clear → check → cleared on exit, nothing on the tab.
+
+---
+
 ## 2026-10-31 — One badge per session, always the current state; tab alerts dropped
 
 **Status:** shipped in 1.4.0. Supersedes the "alerts on the tab" half of the

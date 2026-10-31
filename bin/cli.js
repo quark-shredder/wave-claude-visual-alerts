@@ -57,13 +57,14 @@ const EVENTS = [
 
 // Colour carries urgency, icon and animation carry kind. See README.
 const SCHEME = [
-  ['session',  'SessionStart/Stop', 'wave-pulse+fade',       '#00FFDB', 'Claude session live, idle or finished'],
+  ['session',  'SessionStart/Stop', 'wave-pulse+fade',       '#00FFDB', 'Claude session live, not yet used'],
   ['busy',     'UserPromptSubmit/PreToolUse', 'spinner+spin',   '#429DFF', 'working, no action'],
   ['input',    'PermissionRequest', 'hand+beat',             '#FF9500', 'needs a permission decision'],
   ['waiting',  'Stop/Notification', 'circle-question+fade',  '#FFE900', 'Claude or an agent asked you something'],
   ['limit',    'Notification',      'hourglass-end+fade',    '#FFE900', 'usage limit: press Enter to continue'],
   ['mcp',      'Elicitation',       'message-question+beat', '#FF9500', 'an MCP server wants input'],
   ['computer', 'Notification',      'computer-mouse',        '#429DFF', 'Claude is using your mouse and keyboard'],
+  ['done',     'Stop',              'circle-check',          '#58C142', 'turn finished, until your next prompt'],
   ['failed',   'StopFailure',       'triangle-exclamation+beat', '#FF453A', 'turn died on an API error'],
   ['end',      'SessionEnd',        '(clears everything)',   '-',       'session over'],
 ]

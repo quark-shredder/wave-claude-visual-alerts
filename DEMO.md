@@ -14,8 +14,8 @@ Pause a few seconds between steps so the viewer can see the tab icon change.
 ## Step 1: Announce
 
 > "Every tab with Claude in it shows one icon: what that session is doing
-> right now. Teal pulse means live and idle, blue means working, yellow means
-> it asked you something, orange means blocked on you, red means it failed.
+> right now. Teal pulse means live and not used yet, blue means working, green
+> means finished, yellow means it asked you something, orange means blocked on you, red means it failed.
 > No icon, no Claude."
 
 ---
@@ -35,8 +35,8 @@ Every state cycles for four seconds each.
 ## Step 3: Working, then idle
 
 Ask Claude to do something slow, then **switch to another tab**. The spinner
-keeps turning on the tab you left. When it finishes, it turns into the teal
-pulse. Point at the tabs with no icon at all: no Claude session there.
+keeps turning on the tab you left. When it finishes, it turns into a green
+check, and stays that way until your next prompt. Point at the tabs with no icon at all: no Claude session there.
 
 ---
 
